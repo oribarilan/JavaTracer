@@ -1,6 +1,7 @@
 package agent;
 
 import javassist.CannotCompileException;
+import javassist.ClassClassPath;
 import javassist.ClassPath;
 import javassist.ClassPool;
 import javassist.CtClass;
@@ -11,6 +12,8 @@ import javassist.Modifier;
 import javassist.NotFoundException;
 import javassist.bytecode.AnnotationsAttribute;
 import javassist.bytecode.AttributeInfo;
+import javassist.bytecode.ClassFile;
+import javassist.bytecode.MethodInfo;
 
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
@@ -19,12 +22,61 @@ import java.security.ProtectionDomain;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.omg.IOP.TAG_ORB_TYPE;
+
 public class Agent {
     public static boolean isDebug = false;
-    public static void premain(String agentArgs, Instrumentation inst) {
+       
+    public static <ClassPathForGeneratedClasses> void premain(String agentArgs, Instrumentation inst) throws Exception {
         inst.addTransformer(new ClassFileTransformer() {
+            
+            public boolean isInitiated = false;
+            public void initiate(String name, ClassLoader loader, ProtectionDomain protectionDomain) {
+                try{
+                    if(!isInitiated){
+                        isInitiated = true;
+                        ClassPool cp = ClassPool.getDefault();
+                        cp.importPackage("java.io.BufferedWriter");
+                        cp.importPackage("java.io.FileWriter");
+                        cp.importPackage("java.io.File");
+                        CtClass cc = cp.makeClass("SingleFileWriter");
+                        
+                        CtField fileNameField;			
+			            fileNameField = CtField.make("public static BufferedWriter bw = null;", cc);
+			            fileNameField.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
+			            cc.addField(fileNameField,"null");
+
+                        StringBuilder writeMethodSrc = new StringBuilder();
+                        writeMethodSrc.append("public static synchronized void write(String content){ ");
+                        writeMethodSrc.append("content = content + \"\\n\"; ");
+                        writeMethodSrc.append("if(bw == null){ ");
+                        writeMethodSrc.append("try { ");
+                        writeMethodSrc.append("FileWriter fw = new FileWriter(\"myfile.txt\", true); ");
+                        writeMethodSrc.append("bw = new BufferedWriter(fw); ");
+                        writeMethodSrc.append("} ");
+                        writeMethodSrc.append("catch(Exception e){ System.out.println(\"$$$$$$$ EXCEPTION $$$$$$$\"); System.out.println(e.toString()); } ");
+                        writeMethodSrc.append(" } ");
+                        writeMethodSrc.append("bw.write(content); bw.flush(); System.out.println(\"Wrote!\");");
+                        writeMethodSrc.append(" }");
+                        CtMethod m = CtNewMethod.make(writeMethodSrc.toString(), cc);
+			            m.setModifiers(Modifier.PUBLIC | Modifier.STATIC | Modifier.SYNCHRONIZED);
+			            cc.addMethod(m);
+                        
+                        cc.writeFile("generated\\classes");
+			            cc.toClass(loader, protectionDomain);
+                        ClassPath cpath = new ClassClassPath(cc.getClass());
+                        cp.insertClassPath(cpath);
+                    }
+                }catch(Exception e){
+                    System.out.println("$$$$$$$ EXCEPTION $$$$$$$");
+                    System.out.println(e.toString());
+                }
+            } 
+            
             @Override
             public byte[] transform(ClassLoader classLoader, String className, Class<?> aClass, ProtectionDomain protectionDomain, byte[] bytes) throws IllegalClassFormatException {
+                this.initiate(className, classLoader, protectionDomain);
+
                 try {
                     //ignore classes
                     String[] s = className.split("/");
@@ -52,7 +104,7 @@ public class Agent {
                         // m.addLocalVariable("elapsedTime", CtClass.longType);
                         MethodRecord record = new MethodRecord(m.getLongName(), GetSelfHashTokenFromMethod(m), GetInputTokenFromMethod(m), GetOutputTokenFromMethod(m));
                         if(isDebug) System.out.println(record.DeclareRecordVariable());
-                        m.insertAfter(String.format("%s;System.out.println(%s);",record.DeclareRecordVariable(),MethodRecord.GetRecordVariableName()));
+                        m.insertAfter(String.format("%s; System.out.println(\"GO\"); SingleFileWriter.write(%s); System.out.println(%s);", record.DeclareRecordVariable(), MethodRecord.GetRecordVariableName(), MethodRecord.GetRecordVariableName()));
                     }
                     byte[] byteCode = cc.toBytecode();
                     cc.detach();
@@ -102,5 +154,11 @@ public class Agent {
         return outputToken;
 	}
 
+    private static void generateWriter(CtClass declaringClass) throws CannotCompileException {
+		String src = "public static void write() { System.out.println(\"writing\"); }";
+		CtMethod m = CtNewMethod.make(src, declaringClass);
+        m.setModifiers(Modifier.PUBLIC);
+        declaringClass.addMethod(m);
+	}
 }
 
