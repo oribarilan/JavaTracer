@@ -22,15 +22,53 @@ import java.security.ProtectionDomain;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.print.DocFlavor.STRING;
+
 import org.omg.IOP.TAG_ORB_TYPE;
 
 public class Agent {
     public static boolean isDebug = false;
-       
+    public static boolean isPrintRecord = false;       
     public static <ClassPathForGeneratedClasses> void premain(String agentArgs, Instrumentation inst) throws Exception {
         inst.addTransformer(new ClassFileTransformer() {
             
             public boolean isInitiated = false;
+
+            public void AddWriteMethod(CtClass cc){
+                try{
+                    StringBuilder writeMethodSrc = new StringBuilder();
+                    writeMethodSrc.append("public static synchronized void write(String content){ ");
+                    writeMethodSrc.append("content = content + \"\\n\"; ");
+                    writeMethodSrc.append("if(bw == null){ ");
+                    writeMethodSrc.append("try { ");
+                    writeMethodSrc.append("FileWriter fw = new FileWriter(\"myfile.txt\", true); ");
+                    writeMethodSrc.append("bw = new BufferedWriter(fw); ");
+                    writeMethodSrc.append("} ");
+                    writeMethodSrc.append("catch(Exception e){ System.out.println(\"$$$$$$$ EXCEPTION $$$$$$$\"); System.out.println(e.toString()); } ");
+                    writeMethodSrc.append(" } ");
+                    writeMethodSrc.append("bw.write(content); bw.flush();");
+                    writeMethodSrc.append(" }");
+                    CtMethod m = CtNewMethod.make(writeMethodSrc.toString(), cc);
+                    m.setModifiers(Modifier.PUBLIC | Modifier.STATIC | Modifier.SYNCHRONIZED);
+                    cc.addMethod(m);
+                }catch(Exception e){
+                    System.out.println("$$$$ Exception $$$$");
+                    System.out.println(e.toString());
+                }
+            }
+
+            public void AddWriteField(CtClass cc){
+                try{
+                    CtField fileNameField;			
+                    fileNameField = CtField.make("public static BufferedWriter bw = null;", cc);
+                    fileNameField.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
+                    cc.addField(fileNameField,"null");
+                }catch(Exception e){
+                    System.out.println("$$$$ Exception $$$$");
+                    System.out.println(e.toString());
+                }
+            }
+
             public void initiate(String name, ClassLoader loader, ProtectionDomain protectionDomain) {
                 try{
                     if(!isInitiated){
@@ -40,50 +78,50 @@ public class Agent {
                         cp.importPackage("java.io.FileWriter");
                         cp.importPackage("java.io.File");
                         CtClass cc = cp.makeClass("SingleFileWriter");
-                        
-                        CtField fileNameField;			
-			            fileNameField = CtField.make("public static BufferedWriter bw = null;", cc);
-			            fileNameField.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
-			            cc.addField(fileNameField,"null");
-
-                        StringBuilder writeMethodSrc = new StringBuilder();
-                        writeMethodSrc.append("public static synchronized void write(String content){ ");
-                        writeMethodSrc.append("content = content + \"\\n\"; ");
-                        writeMethodSrc.append("if(bw == null){ ");
-                        writeMethodSrc.append("try { ");
-                        writeMethodSrc.append("FileWriter fw = new FileWriter(\"myfile.txt\", true); ");
-                        writeMethodSrc.append("bw = new BufferedWriter(fw); ");
-                        writeMethodSrc.append("} ");
-                        writeMethodSrc.append("catch(Exception e){ System.out.println(\"$$$$$$$ EXCEPTION $$$$$$$\"); System.out.println(e.toString()); } ");
-                        writeMethodSrc.append(" } ");
-                        writeMethodSrc.append("bw.write(content); bw.flush(); System.out.println(\"Wrote!\");");
-                        writeMethodSrc.append(" }");
-                        CtMethod m = CtNewMethod.make(writeMethodSrc.toString(), cc);
-			            m.setModifiers(Modifier.PUBLIC | Modifier.STATIC | Modifier.SYNCHRONIZED);
-			            cc.addMethod(m);
-                        
+                        AddWriteField(cc);                        
+                        AddWriteMethod(cc);
                         cc.writeFile("generated\\classes");
 			            cc.toClass(loader, protectionDomain);
                         ClassPath cpath = new ClassClassPath(cc.getClass());
                         cp.insertClassPath(cpath);
                     }
                 }catch(Exception e){
-                    System.out.println("$$$$$$$ EXCEPTION $$$$$$$");
+                    System.out.println("$$$$ EXCEPTION $$$$");
                     System.out.println(e.toString());
                 }
-            } 
+            }
+
+            public boolean isIgnoredClass(String className){
+                String[] s = className.split("/");
+                boolean isJavaClass = s[0].equals("java");
+                boolean isJunitClass = s[0].equals("org") && s[1].equals("junit");
+                boolean isSun = s[0].equals("sun") || s[1].equals("sun");
+                return (isJavaClass || isJunitClass || isSun);
+            }
+
+            public void treatMethod(CtMethod method) throws IllegalClassFormatException{
+                try{
+                    if(isDebug) System.out.println("Examining Method: "+method.getLongName());                        
+                    // m.addLocalVariable("elapsedTime", CtClass.longType);
+                    MethodRecord record = new MethodRecord(method.getLongName(), GetSelfHashTokenFromMethod(method), GetInputTokenFromMethod(method), GetOutputTokenFromMethod(method));
+                    if(isDebug) System.out.println(record.DeclareRecordVariable());
+                    String afterCode = String.format("%s; SingleFileWriter.write(%s);", record.DeclareRecordVariable(), MethodRecord.GetRecordVariableName());
+                    if(isPrintRecord){
+                        afterCode = afterCode + String.format("System.out.println(%s);",MethodRecord.GetRecordVariableName());
+                    }
+                    method.insertAfter(afterCode);
+                }catch(Exception e){
+                    System.out.println("$$$$ EXCEPTION $$$$");
+                    System.out.println(e.toString());
+                }
+            }
             
             @Override
             public byte[] transform(ClassLoader classLoader, String className, Class<?> aClass, ProtectionDomain protectionDomain, byte[] bytes) throws IllegalClassFormatException {
                 this.initiate(className, classLoader, protectionDomain);
 
                 try {
-                    //ignore classes
-                    String[] s = className.split("/");
-                    boolean isJavaClass = s[0].equals("java");
-                    boolean isJunitClass = s[0].equals("org") && s[1].equals("junit");
-                    boolean isSun = s[0].equals("sun") || s[1].equals("sun");
-                    if(isJavaClass || isJunitClass || isSun){
+                    if(isIgnoredClass(className)){
                         return null;
                     }
                     //start
@@ -100,11 +138,7 @@ public class Agent {
                     CtMethod[] methods = cc.getDeclaredMethods();
                     if(isDebug) System.out.println(String.format("num of methods in %s is %s", name, ""+methods.length));
                     for(CtMethod m : methods){
-                        if(isDebug) System.out.println("Examining Method: "+m.getLongName());                        
-                        // m.addLocalVariable("elapsedTime", CtClass.longType);
-                        MethodRecord record = new MethodRecord(m.getLongName(), GetSelfHashTokenFromMethod(m), GetInputTokenFromMethod(m), GetOutputTokenFromMethod(m));
-                        if(isDebug) System.out.println(record.DeclareRecordVariable());
-                        m.insertAfter(String.format("%s; System.out.println(\"GO\"); SingleFileWriter.write(%s); System.out.println(%s);", record.DeclareRecordVariable(), MethodRecord.GetRecordVariableName(), MethodRecord.GetRecordVariableName()));
+                        treatMethod(m);
                     }
                     byte[] byteCode = cc.toBytecode();
                     cc.detach();
