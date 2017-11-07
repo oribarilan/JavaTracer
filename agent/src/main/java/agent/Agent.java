@@ -20,7 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Agent {
-
+    public static boolean isDebug = false;
     public static void premain(String agentArgs, Instrumentation inst) {
         inst.addTransformer(new ClassFileTransformer() {
             @Override
@@ -36,7 +36,7 @@ public class Agent {
                     }
                     //start
                     String name = className.replace("/", ".");
-                    System.out.println("Examining Class: "+name);
+                    if(isDebug) System.out.println("Examining Class: "+name);
                     name = name.split("$")[0];
                     ClassPool cp = ClassPool.getDefault();
                     cp.importPackage(name);
@@ -46,12 +46,12 @@ public class Agent {
                         return null;
                     }
                     CtMethod[] methods = cc.getDeclaredMethods();
-                    System.out.println(String.format("num of methods in %s is %s", name, ""+methods.length));
+                    if(isDebug) System.out.println(String.format("num of methods in %s is %s", name, ""+methods.length));
                     for(CtMethod m : methods){
-                        System.out.println("Examining Method: "+m.getLongName());                        
+                        if(isDebug) System.out.println("Examining Method: "+m.getLongName());                        
                         // m.addLocalVariable("elapsedTime", CtClass.longType);
                         MethodRecord record = new MethodRecord(m.getLongName(), GetSelfHashTokenFromMethod(m), GetInputTokenFromMethod(m), GetOutputTokenFromMethod(m));
-                        System.out.println(record.DeclareRecordVariable());
+                        if(isDebug) System.out.println(record.DeclareRecordVariable());
                         m.insertAfter(String.format("%s;System.out.println(%s);",record.DeclareRecordVariable(),MethodRecord.GetRecordVariableName()));
                     }
                     byte[] byteCode = cc.toBytecode();
