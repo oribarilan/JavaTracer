@@ -1,0 +1,9 @@
+other.Stuff.run(),STATIC,VOID
+other.Stuff.run1(),32374789,VOID
+other.Stuff.run2(),32374789,1973538135
+other.Stuff.run3(),32374789,NULL
+other.Stuff.run4(),32374789,5
+other.Stuff.run5(int,int,int),32374789,1,2,3,3.2
+other.Stuff.run6(java.lang.String),32374789,1023487453,c
+other.Stuff.run7(java.lang.String),32374789,NULL,NULL
+other.Main.main(java.lang.String[]),STATIC,1865127310,VOID

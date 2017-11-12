@@ -28,7 +28,7 @@ import org.omg.IOP.TAG_ORB_TYPE;
 
 public class Agent {
     public static boolean isDebug = false;
-    public static boolean isPrintRecord = false;       
+    public static boolean isPrintRecord = true;       
     public static <ClassPathForGeneratedClasses> void premain(String agentArgs, Instrumentation inst) throws Exception {
         inst.addTransformer(new ClassFileTransformer() {
             
@@ -77,7 +77,7 @@ public class Agent {
                         cp.importPackage("java.io.BufferedWriter");
                         cp.importPackage("java.io.FileWriter");
                         cp.importPackage("java.io.File");
-                        CtClass cc = cp.makeClass("SingleFileWriter");
+                        CtClass cc = cp.makeClass("agent.SingleFileWriter");
                         AddWriteField(cc);                        
                         AddWriteMethod(cc);
                         cc.writeFile("generated\\classes");
@@ -105,7 +105,7 @@ public class Agent {
                     // m.addLocalVariable("elapsedTime", CtClass.longType);
                     MethodRecord record = new MethodRecord(method.getLongName(), GetSelfHashTokenFromMethod(method), GetInputTokenFromMethod(method), GetOutputTokenFromMethod(method));
                     if(isDebug) System.out.println(record.DeclareRecordVariable());
-                    String afterCode = String.format("%s; SingleFileWriter.write(%s);", record.DeclareRecordVariable(), MethodRecord.GetRecordVariableName());
+                    String afterCode = String.format("%s; agent.SingleFileWriter.write(%s);", record.DeclareRecordVariable(), MethodRecord.GetRecordVariableName());
                     if(isPrintRecord){
                         afterCode = afterCode + String.format("System.out.println(%s);",MethodRecord.GetRecordVariableName());
                     }
@@ -188,11 +188,5 @@ public class Agent {
         return outputToken;
 	}
 
-    private static void generateWriter(CtClass declaringClass) throws CannotCompileException {
-		String src = "public static void write() { System.out.println(\"writing\"); }";
-		CtMethod m = CtNewMethod.make(src, declaringClass);
-        m.setModifiers(Modifier.PUBLIC);
-        declaringClass.addMethod(m);
-	}
 }
 
