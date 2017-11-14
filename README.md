@@ -28,17 +28,19 @@ java -javaagent:<full-path-to-agent.jar> -jar <full-path-to-target-jar.jar>
 
 ## Use Case 2: Attach Agent to Test Suit
 
-# For projects built using _maven_ and the  _surefire_ plugin
+### For projects built using _maven_ and the  _surefire_ plugin
 
-```
+<pre>
+<code>
 <plugin>
   <groupId>org.apache.maven.plugins</groupId>
   <artifactId>maven-surefire-plugin</artifactId>
   <configuration>
-    <argLine>-javaagent:"<full-path-to-agent.jar>"</argLine>
+    **<argLine>-javaagent:"<full-path-to-agent.jar>"</argLine>**
     ...
   </configuration>
 </plugin>
-```
+</pre>
+</code>
 
 Thanks to Thomas Queste for his [blog post](http://tomsquest.com/blog/2014/01/intro-java-agent-and-bytecode-manipulation/) which helped greatly in the first version of this project.
