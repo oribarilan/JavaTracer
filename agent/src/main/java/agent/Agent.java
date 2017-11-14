@@ -21,7 +21,7 @@ import java.lang.instrument.Instrumentation;
 import java.security.ProtectionDomain;
 import java.util.ArrayList;
 import java.util.List;
-
+import java.util.Random;
 import javax.print.DocFlavor.STRING;
 
 import org.omg.IOP.TAG_ORB_TYPE;
@@ -41,7 +41,7 @@ public class Agent {
                     writeMethodSrc.append("content = content + \"\\n\"; ");
                     writeMethodSrc.append("if(bw == null){ ");
                     writeMethodSrc.append("try { ");
-                    writeMethodSrc.append("FileWriter fw = new FileWriter(\"myfile.txt\", true); ");
+                    writeMethodSrc.append("FileWriter fw = new FileWriter(\"traces.txt\", true); ");
                     writeMethodSrc.append("bw = new BufferedWriter(fw); ");
                     writeMethodSrc.append("} ");
                     writeMethodSrc.append("catch(Exception e){ System.out.println(\"$$$$$$$ EXCEPTION - cant instantiate bufferedwriter $$$$$$$\"); System.out.println(e.toString()); } ");
@@ -92,6 +92,9 @@ public class Agent {
             }
 
             public boolean isIgnoredClass(String className){
+                if(className == null){
+                    return true;
+                }
                 String[] s = className.split("/");
                 boolean isJavaClass = s[0].equals("java");
                 boolean isJunitClass = s.length >= 2 &&  s[0].equals("org") && s[1].equals("junit");
@@ -101,9 +104,17 @@ public class Agent {
             }
 
             public boolean isIgnoredMethod(CtMethod method) {
+                if(method == null){
+                    return true;
+                }
+                Random r = new Random();
+                int Lowest = 1;
+                int Highest = 200;
+                int rolledNumber = r.nextInt(Highest - Lowest + 1) + Lowest;
 				boolean isNative = Modifier.isNative(method.getModifiers());
                 boolean isAbstract = Modifier.isAbstract(method.getModifiers());
-                return isNative || isAbstract;
+                boolean isUnlucky = rolledNumber != 1;
+                return isNative || isAbstract || isUnlucky;
 			}
 
             public void treatMethod(CtMethod method) throws IllegalClassFormatException{
