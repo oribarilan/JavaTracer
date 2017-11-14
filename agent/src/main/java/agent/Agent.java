@@ -28,7 +28,7 @@ import org.omg.IOP.TAG_ORB_TYPE;
 
 public class Agent {
     public static boolean isDebug = false;
-    public static boolean isPrintRecord = true;       
+    public static boolean isPrintRecord = false;       
     public static <ClassPathForGeneratedClasses> void premain(String agentArgs, Instrumentation inst) throws Exception {
         inst.addTransformer(new ClassFileTransformer() {
             
@@ -44,7 +44,7 @@ public class Agent {
                     writeMethodSrc.append("FileWriter fw = new FileWriter(\"myfile.txt\", true); ");
                     writeMethodSrc.append("bw = new BufferedWriter(fw); ");
                     writeMethodSrc.append("} ");
-                    writeMethodSrc.append("catch(Exception e){ System.out.println(\"$$$$$$$ EXCEPTION $$$$$$$\"); System.out.println(e.toString()); } ");
+                    writeMethodSrc.append("catch(Exception e){ System.out.println(\"$$$$$$$ EXCEPTION - cant instantiate bufferedwriter $$$$$$$\"); System.out.println(e.toString()); } ");
                     writeMethodSrc.append(" } ");
                     writeMethodSrc.append("bw.write(content); bw.flush();");
                     writeMethodSrc.append(" }");
@@ -52,7 +52,7 @@ public class Agent {
                     m.setModifiers(Modifier.PUBLIC | Modifier.STATIC | Modifier.SYNCHRONIZED);
                     cc.addMethod(m);
                 }catch(Exception e){
-                    System.out.println("$$$$ Exception $$$$");
+                    System.out.println("$$$$ Exception - cant add to method $$$$");
                     System.out.println(e.toString());
                 }
             }
@@ -64,7 +64,7 @@ public class Agent {
                     fileNameField.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
                     cc.addField(fileNameField,"null");
                 }catch(Exception e){
-                    System.out.println("$$$$ Exception $$$$");
+                    System.out.println("$$$$ Exception - cant add field $$$$");
                     System.out.println(e.toString());
                 }
             }
@@ -86,7 +86,7 @@ public class Agent {
                         cp.insertClassPath(cpath);
                     }
                 }catch(Exception e){
-                    System.out.println("$$$$ EXCEPTION $$$$");
+                    System.out.println("$$$$ EXCEPTION - cant insert singlefilewriter class $$$$");
                     System.out.println(e.toString());
                 }
             }
@@ -94,10 +94,17 @@ public class Agent {
             public boolean isIgnoredClass(String className){
                 String[] s = className.split("/");
                 boolean isJavaClass = s[0].equals("java");
-                boolean isJunitClass = s[0].equals("org") && s[1].equals("junit");
-                boolean isSun = s[0].equals("sun") || s[1].equals("sun");
-                return (isJavaClass || isJunitClass || isSun);
+                boolean isJunitClass = s.length >= 2 &&  s[0].equals("org") && s[1].equals("junit");
+                boolean isSun = s[0].equals("sun") || (s.length >= 2 && s[1].equals("sun"));
+                boolean isSurefire = s.length >= 4 && s[0].equals("org") && s[1].equals("apache") && s[2].equals("maven") && s[3].equals("surefire");
+                return (isJavaClass || isJunitClass || isSun || isSurefire);
             }
+
+            public boolean isIgnoredMethod(CtMethod method) {
+				boolean isNative = Modifier.isNative(method.getModifiers());
+                boolean isAbstract = Modifier.isAbstract(method.getModifiers());
+                return isNative || isAbstract;
+			}
 
             public void treatMethod(CtMethod method) throws IllegalClassFormatException{
                 try{
@@ -111,7 +118,8 @@ public class Agent {
                     }
                     method.insertAfter(afterCode);
                 }catch(Exception e){
-                    System.out.println("$$$$ EXCEPTION $$$$");
+                    System.out.println("$$$$ EXCEPTION - cant insert after $$$$");
+                    System.out.println("Method name: "+method.getLongName());
                     System.out.println(e.toString());
                 }
             }
@@ -138,6 +146,9 @@ public class Agent {
                     CtMethod[] methods = cc.getDeclaredMethods();
                     if(isDebug) System.out.println(String.format("num of methods in %s is %s", name, ""+methods.length));
                     for(CtMethod m : methods){
+                        if(isIgnoredMethod(m)){
+                            continue;
+                        }
                         treatMethod(m);
                     }
                     byte[] byteCode = cc.toBytecode();
