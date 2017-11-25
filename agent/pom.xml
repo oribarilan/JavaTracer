@@ -32,10 +32,7 @@
         <artifactId>maven-jar-plugin</artifactId>
         <configuration>
           <archive>
-            <manifestEntries>
-              <Premain-Class>agent.Agent</Premain-Class>
-              <Can-Retransform-Classes>true</Can-Retransform-Classes>
-            </manifestEntries>
+            <manifestFile>src/main/java/agent/MANIFEST.MF</manifestFile>
           </archive>
         </configuration>
       </plugin>

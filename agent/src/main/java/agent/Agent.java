@@ -1,6 +1,5 @@
 package agent;
 
-import javassist.CannotCompileException;
 import javassist.ClassClassPath;
 import javassist.ClassPath;
 import javassist.ClassPool;
@@ -10,10 +9,6 @@ import javassist.CtMethod;
 import javassist.CtNewMethod;
 import javassist.Modifier;
 import javassist.NotFoundException;
-import javassist.bytecode.AnnotationsAttribute;
-import javassist.bytecode.AttributeInfo;
-import javassist.bytecode.ClassFile;
-import javassist.bytecode.MethodInfo;
 
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
@@ -22,9 +17,6 @@ import java.security.ProtectionDomain;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-import javax.print.DocFlavor.STRING;
-
-import org.omg.IOP.TAG_ORB_TYPE;
 
 public class Agent {
     public static boolean isDebug = false;
@@ -80,7 +72,7 @@ public class Agent {
                         CtClass cc = cp.makeClass("agent.SingleFileWriter");
                         AddWriteField(cc);                        
                         AddWriteMethod(cc);
-                        cc.writeFile("generated\\classes");
+                        cc.setModifiers(Modifier.PUBLIC);
 			            cc.toClass(loader, protectionDomain);
                         ClassPath cpath = new ClassClassPath(cc.getClass());
                         cp.insertClassPath(cpath);
@@ -95,18 +87,23 @@ public class Agent {
                 if(className == null){
                     return true;
                 }
+                String lowerClassName = className.toLowerCase();
                 String[] s = className.split("/");
                 boolean isJavaClass = s[0].equals("java");
-                boolean isJunitClass = s.length >= 2 &&  s[0].equals("org") && s[1].equals("junit");
+                boolean isJunitClass = lowerClassName.contains("junit");
                 boolean isSun = s[0].equals("sun") || (s.length >= 2 && s[1].equals("sun"));
                 boolean isSurefire = s.length >= 4 && s[0].equals("org") && s[1].equals("apache") && s[2].equals("maven") && s[3].equals("surefire");
-                return (isJavaClass || isJunitClass || isSun || isSurefire);
+                boolean isMaven = s.length >= 3 && s[0].equals("org") && s[1].equals("apache") && s[2].equals("maven") ;
+                boolean isTestClass = lowerClassName.contains("test");
+                boolean isJdk = lowerClassName.contains("jdk");
+                return (isJavaClass || isJunitClass || isJdk || isSun || isSurefire || isMaven || isTestClass);
             }
 
             public boolean isIgnoredMethod(CtMethod method) {
                 if(method == null){
                     return true;
                 }
+                String lowerMethodName = method.getLongName();
                 Random r = new Random();
                 int Lowest = 1;
                 int Highest = 200;
@@ -114,7 +111,8 @@ public class Agent {
 				boolean isNative = Modifier.isNative(method.getModifiers());
                 boolean isAbstract = Modifier.isAbstract(method.getModifiers());
                 boolean isUnlucky = rolledNumber != 1;
-                return isNative || isAbstract || isUnlucky;
+                boolean isTestMethod = lowerMethodName.contains("test");
+                return (isNative || isAbstract || isTestMethod);
 			}
 
             public void treatMethod(CtMethod method) throws IllegalClassFormatException{
@@ -122,7 +120,7 @@ public class Agent {
                     if(isDebug) System.out.println("Examining Method: "+method.getLongName());                        
                     // m.addLocalVariable("elapsedTime", CtClass.longType);
                     MethodRecord record = new MethodRecord(method.getLongName(), GetSelfHashTokenFromMethod(method), GetInputTokenFromMethod(method), GetOutputTokenFromMethod(method));
-                    if(isDebug) System.out.println(record.DeclareRecordVariable());
+                    // String afterCode = String.format("try{ %s; agent.SingleFileWriter.write(%s); } catch(NoClassDefFoundError e) { System.out.println(\"writer not found\"); }", record.DeclareRecordVariable(), MethodRecord.GetRecordVariableName());
                     String afterCode = String.format("%s; agent.SingleFileWriter.write(%s);", record.DeclareRecordVariable(), MethodRecord.GetRecordVariableName());
                     if(isPrintRecord){
                         afterCode = afterCode + String.format("System.out.println(%s);",MethodRecord.GetRecordVariableName());
@@ -145,27 +143,27 @@ public class Agent {
                     }
                     //start
                     String name = className.replace("/", ".");
-                    if(isDebug) System.out.println("Examining Class: "+name);
+                    if(isDebug) System.out.println("Transforming Class: "+name);
                     name = name.split("$")[0];
                     ClassPool cp = ClassPool.getDefault();
-                    cp.importPackage(name);
+                    cp.importPackage("agent.SingleFileWriter");
+                    cp.appendClassPath("generated\\classes");
                     cp.appendClassPath(System.getProperty("user.dir"));
                     CtClass cc = cp.get(name);
                     if(cc.isInterface()){
                         return null;
                     }
                     CtMethod[] methods = cc.getDeclaredMethods();
-                    if(isDebug) System.out.println(String.format("num of methods in %s is %s", name, ""+methods.length));
                     for(CtMethod m : methods){
-                        if(isIgnoredMethod(m)){
-                            continue;
+                        if(!isIgnoredMethod(m)){
+                            treatMethod(m);
                         }
-                        treatMethod(m);
                     }
                     byte[] byteCode = cc.toBytecode();
                     cc.detach();
                     return byteCode;
                 } catch (Exception ex) {
+                    System.out.println("$$$$$$$$$$ Exception in transform $$$$$$$$$$$$$$");
                     ex.printStackTrace();
                 }
                 return null;
