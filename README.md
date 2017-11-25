@@ -56,7 +56,7 @@ Add _argLine_ element under _configuration_, e.g.:
 </plugin>
 ```
 
-### Then, run the project using the following command
+### Then, run the project's test suite using the following command
 
 ```
 mvn surefire:test
