@@ -56,6 +56,14 @@ Add _argLine_ element under _configuration_, e.g.:
 </plugin>
 ```
 
+### Then, run the project using the following command
+
+```
+mvn surefire:test
+```
+
+(notice that you might need to run `mvn package` first)
+
 ## References & Recognitions
 
 * [Amir Elmishali](https://github.com/amir9979). A contributor to this project
