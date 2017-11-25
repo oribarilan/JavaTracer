@@ -33,12 +33,19 @@ public class Agent {
                     writeMethodSrc.append("content = content + \"\\n\"; ");
                     writeMethodSrc.append("if(bw == null){ ");
                     writeMethodSrc.append("try { ");
-                    writeMethodSrc.append("FileWriter fw = new FileWriter(\"traces.txt\", true); ");
+                    writeMethodSrc.append("f = new File(\"traces\"+fileNum+\".txt\");");
+                    writeMethodSrc.append("FileWriter fw = new FileWriter(f, true); ");
                     writeMethodSrc.append("bw = new BufferedWriter(fw); ");
                     writeMethodSrc.append("} ");
                     writeMethodSrc.append("catch(Exception e){ System.out.println(\"$$$$$$$ EXCEPTION - cant instantiate bufferedwriter $$$$$$$\"); System.out.println(e.toString()); } ");
                     writeMethodSrc.append(" } ");
-                    writeMethodSrc.append("bw.write(content); bw.flush();");
+                    writeMethodSrc.append("bw.write(content); bw.flush(); writesNum++;");
+                    writeMethodSrc.append("if(writesNum > 20000000){ ");
+                    writeMethodSrc.append("fileNum++;");
+                    writeMethodSrc.append("bw.close();");
+                    writeMethodSrc.append("bw = null;");
+                    writeMethodSrc.append("writesNum = 0;");
+                    writeMethodSrc.append(" }");
                     writeMethodSrc.append(" }");
                     CtMethod m = CtNewMethod.make(writeMethodSrc.toString(), cc);
                     m.setModifiers(Modifier.PUBLIC | Modifier.STATIC | Modifier.SYNCHRONIZED);
@@ -51,6 +58,18 @@ public class Agent {
 
             public void AddWriteField(CtClass cc){
                 try{
+                    CtField writesNumField;			
+                    writesNumField = CtField.make("public static int writesNum = 0;", cc);
+                    writesNumField.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
+                    cc.addField(writesNumField, "0");
+                    CtField fileNumberField;			
+                    fileNumberField = CtField.make("public static int fileNum = 0;", cc);
+                    fileNumberField.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
+                    cc.addField(fileNumberField, "0");
+                    CtField fileField;			
+                    fileField = CtField.make("public static File f = null;", cc);
+                    fileField.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
+                    cc.addField(fileField,"null");
                     CtField fileNameField;			
                     fileNameField = CtField.make("public static BufferedWriter bw = null;", cc);
                     fileNameField.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
