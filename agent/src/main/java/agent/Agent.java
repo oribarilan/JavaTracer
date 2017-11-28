@@ -31,6 +31,7 @@ public class Agent {
                     StringBuilder writeMethodSrc = new StringBuilder();
                     writeMethodSrc.append("public static synchronized void write(String content){ ");
                     writeMethodSrc.append("content = content + \"\\n\"; ");
+                    writeMethodSrc.append("if(lineSet == null) { lineSet = new HashSet(); }");
                     writeMethodSrc.append("if(bw == null){ ");
                     writeMethodSrc.append("try { ");
                     writeMethodSrc.append("f = new File(\"traces\"+fileNum+\".txt\");");
@@ -39,7 +40,8 @@ public class Agent {
                     writeMethodSrc.append("} ");
                     writeMethodSrc.append("catch(Exception e){ System.out.println(\"$$$$$$$ EXCEPTION - cant instantiate bufferedwriter $$$$$$$\"); System.out.println(e.toString()); } ");
                     writeMethodSrc.append(" } ");
-                    writeMethodSrc.append("bw.write(content); bw.flush(); writesNum++;");
+                    writeMethodSrc.append(" if(!lineSet.contains(Integer.valueOf(content.hashCode()))) { bw.write(content); bw.flush(); writesNum++; lineSet.add(Integer.valueOf(content.hashCode())); }");
+                    writeMethodSrc.append(" if(lineSet.size() > 500000) { lineSet = new HashSet(); }");
                     writeMethodSrc.append("if(writesNum > 20000000){ ");
                     writeMethodSrc.append("fileNum++;");
                     writeMethodSrc.append("bw.close();");
@@ -62,18 +64,26 @@ public class Agent {
                     writesNumField = CtField.make("public static int writesNum = 0;", cc);
                     writesNumField.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
                     cc.addField(writesNumField, "0");
+                    
                     CtField fileNumberField;			
                     fileNumberField = CtField.make("public static int fileNum = 0;", cc);
                     fileNumberField.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
                     cc.addField(fileNumberField, "0");
+                    
                     CtField fileField;			
                     fileField = CtField.make("public static File f = null;", cc);
                     fileField.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
                     cc.addField(fileField,"null");
+                    
                     CtField fileNameField;			
                     fileNameField = CtField.make("public static BufferedWriter bw = null;", cc);
                     fileNameField.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
                     cc.addField(fileNameField,"null");
+                    
+                    CtField fieldLineSet;			
+                    fieldLineSet = CtField.make("public static HashSet lineSet = null;", cc);
+                    fieldLineSet.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
+                    cc.addField(fieldLineSet,"null");
                 }catch(Exception e){
                     System.out.println("$$$$ Exception - cant add field $$$$");
                     System.out.println(e.toString());
@@ -88,6 +98,7 @@ public class Agent {
                         cp.importPackage("java.io.BufferedWriter");
                         cp.importPackage("java.io.FileWriter");
                         cp.importPackage("java.io.File");
+                        cp.importPackage("java.util.HashSet");
                         CtClass cc = cp.makeClass("agent.SingleFileWriter");
                         AddWriteField(cc);                        
                         AddWriteMethod(cc);
@@ -125,13 +136,13 @@ public class Agent {
                 String lowerMethodName = method.getLongName();
                 Random r = new Random();
                 int Lowest = 1;
-                int Highest = 200;
+                int Highest = 100;
                 int rolledNumber = r.nextInt(Highest - Lowest + 1) + Lowest;
 				boolean isNative = Modifier.isNative(method.getModifiers());
                 boolean isAbstract = Modifier.isAbstract(method.getModifiers());
                 boolean isUnlucky = rolledNumber != 1;
                 boolean isTestMethod = lowerMethodName.contains("test");
-                return (isNative || isAbstract || isTestMethod);
+                return (isNative || isAbstract || isTestMethod || isUnlucky);
 			}
 
             public void treatMethod(CtMethod method) throws IllegalClassFormatException{
