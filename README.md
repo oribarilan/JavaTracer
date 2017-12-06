@@ -61,6 +61,10 @@ Add _argLine_ element under _configuration_, e.g.:
 ```
 mvn surefire:test
 ```
+Alternatively, you can run a single test class as in the following example (where class name is `FunctionUtilsTest`)
+```
+mvn surefire:test -Dtest=FunctionUtilsTest
+```
 
 (notice that you might need to run `mvn package` first)
 
