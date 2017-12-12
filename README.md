@@ -71,7 +71,7 @@ mvn surefire:test -Dtest=FunctionUtilsTest
 
 1. Running a single test. Example: class name = `GradientFunctionTest` and method name = `test2DDistance`
 ```
-mvn surefire:test -Dtest=GradientFunctionTest$test2DDistance
+mvn surefire:test -Dtest=GradientFunctionTest#test2DDistance
 ```
 
 2. Rebuild the whole project without running the test suit
