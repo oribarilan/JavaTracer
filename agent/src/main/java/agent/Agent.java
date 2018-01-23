@@ -20,7 +20,11 @@ import java.util.Random;
 
 public class Agent {
     public static boolean isDebug = false;
-    public static boolean isPrintRecord = false;       
+    public static boolean isPrintRecord = false;
+    
+    //if true, tracer will switch output files every 20,000,000 records
+    public static boolean isFileSwitch = false;
+
     public static <ClassPathForGeneratedClasses> void premain(String agentArgs, Instrumentation inst) throws Exception {
         inst.addTransformer(new ClassFileTransformer() {
             
@@ -34,15 +38,15 @@ public class Agent {
                     writeMethodSrc.append("if(lineSet == null) { lineSet = new HashSet(); }");
                     writeMethodSrc.append("if(bw == null){ ");
                     writeMethodSrc.append("try { ");
-                    writeMethodSrc.append("f = new File(\"traces\"+fileNum+\".txt\");");
+                    writeMethodSrc.append("f = new File(\"traces\"+fileNum+\".log\");");
                     writeMethodSrc.append("FileWriter fw = new FileWriter(f, true); ");
                     writeMethodSrc.append("bw = new BufferedWriter(fw); ");
                     writeMethodSrc.append("} ");
                     writeMethodSrc.append("catch(Exception e){ System.out.println(\"$$$$$$$ EXCEPTION - cant instantiate bufferedwriter $$$$$$$\"); System.out.println(e.toString()); } ");
                     writeMethodSrc.append(" } ");
-                    writeMethodSrc.append(" if(!lineSet.contains(Integer.valueOf(content.hashCode()))) { bw.write(content); bw.flush(); writesNum++; lineSet.add(Integer.valueOf(content.hashCode())); }");
+                    writeMethodSrc.append(" if(!lineSet.contains(content)) { bw.write(content); bw.flush(); writesNum++; lineSet.add(content); }");
                     writeMethodSrc.append(" if(lineSet.size() > 500000) { lineSet = new HashSet(); }");
-                    writeMethodSrc.append("if(writesNum > 20000000){ ");
+                    writeMethodSrc.append(String.format("if(%s && writesNum > 20000000){ ", isFileSwitch));
                     writeMethodSrc.append("fileNum++;");
                     writeMethodSrc.append("bw.close();");
                     writeMethodSrc.append("bw = null;");
@@ -136,13 +140,13 @@ public class Agent {
                 String lowerMethodName = method.getLongName();
                 Random r = new Random();
                 int Lowest = 1;
-                int Highest = 100;
+                int Highest = 10;
                 int rolledNumber = r.nextInt(Highest - Lowest + 1) + Lowest;
 				boolean isNative = Modifier.isNative(method.getModifiers());
                 boolean isAbstract = Modifier.isAbstract(method.getModifiers());
                 boolean isUnlucky = rolledNumber != 1;
                 boolean isTestMethod = lowerMethodName.contains("test");
-                return (isNative || isAbstract || isTestMethod || isUnlucky);
+                return (isNative || isAbstract || isTestMethod);
 			}
 
             public void treatMethod(CtMethod method) throws IllegalClassFormatException{

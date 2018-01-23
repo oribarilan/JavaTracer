@@ -9,6 +9,11 @@ public class MethodRecord {
     private String outputToken;
     
     public MethodRecord(String methodLongName, String selfHashToken, List<String> inputToken, String outputToken){
+        //fix methodname - start
+        //replace ',' with '_' because it will be contained in a CSV file
+        methodLongName = methodLongName.replace(',', '_');
+        methodLongName = methodLongName.replaceFirst("(?:[$][0-9])", "");
+        //fix methodname - end
         this.methodLongName = methodLongName;
         this.selfHashToken = selfHashToken;
         this.inputToken = inputToken;
