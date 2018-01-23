@@ -61,8 +61,23 @@ Add _argLine_ element under _configuration_, e.g.:
 ```
 mvn surefire:test
 ```
-
+Alternatively, you can run a single test class as in the following example (where class name is `FunctionUtilsTest`)
+```
+mvn surefire:test -Dtest=FunctionUtilsTest
+```
 (notice that you might need to run `mvn package` first)
+
+### Useful maven/surefire operations:
+
+1. Running a single test. Example: class name = `GradientFunctionTest` and method name = `test2DDistance`
+```
+mvn surefire:test -Dtest=GradientFunctionTest#test2DDistance
+```
+
+2. Rebuild the whole project without running the test suit
+```
+mvn install -DskipTests
+```
 
 ## References & Recognitions
 
