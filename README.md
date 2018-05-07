@@ -16,8 +16,8 @@ The goal of this project is to instrument a java program such that rich traces o
 
 ## Prerequisites
 
-* Java
-* Maven
+* Java Development Kit (V == [7u60](http://www.oracle.com/technetwork/java/javase/downloads/java-archive-downloads-javase7-521261.html))
+* Maven (V >= 3.3.9)
 
 ## Build
 
