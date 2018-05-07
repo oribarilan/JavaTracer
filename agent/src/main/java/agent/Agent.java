@@ -32,7 +32,7 @@ public class Agent {
 
     public static <ClassPathForGeneratedClasses> void premain(String agentArgs, Instrumentation inst) throws Exception {
         inst.addTransformer(new ClassFileTransformer() {
-            
+
             public boolean isInitiated = false;
 
             public void AddWriteMethod(CtClass cc){
@@ -69,27 +69,27 @@ public class Agent {
 
             public void AddWriteField(CtClass cc){
                 try{
-                    CtField writesNumField;			
+                    CtField writesNumField;
                     writesNumField = CtField.make("public static int writesNum = 0;", cc);
                     writesNumField.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
                     cc.addField(writesNumField, "0");
-                    
-                    CtField fileNumberField;			
+
+                    CtField fileNumberField;
                     fileNumberField = CtField.make("public static int fileNum = 0;", cc);
                     fileNumberField.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
                     cc.addField(fileNumberField, "0");
-                    
-                    CtField fileField;			
+
+                    CtField fileField;
                     fileField = CtField.make("public static File f = null;", cc);
                     fileField.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
                     cc.addField(fileField,"null");
-                    
-                    CtField fileNameField;			
+
+                    CtField fileNameField;
                     fileNameField = CtField.make("public static BufferedWriter bw = null;", cc);
                     fileNameField.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
                     cc.addField(fileNameField,"null");
-                    
-                    CtField fieldLineSet;			
+
+                    CtField fieldLineSet;
                     fieldLineSet = CtField.make("public static HashSet lineSet = null;", cc);
                     fieldLineSet.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
                     cc.addField(fieldLineSet,"null");
@@ -109,7 +109,7 @@ public class Agent {
                         cp.importPackage("java.io.File");
                         cp.importPackage("java.util.HashSet");
                         CtClass cc = cp.makeClass("agent.SingleFileWriter");
-                        AddWriteField(cc);                        
+                        AddWriteField(cc);
                         AddWriteMethod(cc);
                         cc.setModifiers(Modifier.PUBLIC);
 			            cc.toClass(loader, protectionDomain);
@@ -143,7 +143,7 @@ public class Agent {
                     return true;
                 }
                 String lowerMethodName = method.getLongName();
-				boolean isNative = Modifier.isNative(method.getModifiers());
+		            boolean isNative = Modifier.isNative(method.getModifiers());
                 boolean isAbstract = Modifier.isAbstract(method.getModifiers());
                 boolean isTestMethod = lowerMethodName.contains("test");
                 boolean isUnlucky = rand.nextDouble() > sampleRate;
@@ -153,7 +153,7 @@ public class Agent {
 
             public void treatMethod(CtMethod method) throws IllegalClassFormatException{
                 try{
-                    if(isDebug) System.out.println("Examining Method: "+method.getLongName());                        
+                    if(isDebug) System.out.println("Examining Method: "+method.getLongName());
                     // m.addLocalVariable("elapsedTime", CtClass.longType);
                     MethodRecord record = new MethodRecord(method.getLongName(), GetSelfHashTokenFromMethod(method), GetInputTokenFromMethod(method), GetOutputTokenFromMethod(method));
                     // String afterCode = String.format("try{ %s; agent.SingleFileWriter.write(%s); } catch(NoClassDefFoundError e) { System.out.println(\"writer not found\"); }", record.DeclareRecordVariable(), MethodRecord.GetRecordVariableName());
@@ -168,7 +168,7 @@ public class Agent {
                     System.out.println(e.toString());
                 }
             }
-            
+
             @Override
             public byte[] transform(ClassLoader classLoader, String className, Class<?> aClass, ProtectionDomain protectionDomain, byte[] bytes) throws IllegalClassFormatException {
                 this.initiate(className, classLoader, protectionDomain);
@@ -245,4 +245,3 @@ public class Agent {
 	}
 
 }
-

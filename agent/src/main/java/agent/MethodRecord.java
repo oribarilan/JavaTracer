@@ -7,7 +7,7 @@ public class MethodRecord {
 	private String selfHashToken;
     private List<String> inputToken;
     private String outputToken;
-    
+
     public MethodRecord(String methodLongName, String selfHashToken, List<String> inputToken, String outputToken){
         //fix methodname - start
         //replace ',' with '_' because it will be contained in a CSV file
@@ -39,12 +39,18 @@ public class MethodRecord {
     }
 
     public String GetRecordCodeToken(){
-        String[] elements = new String[inputToken.size() + 2];
+        String[] elements = new String[this.inputToken.size() + 2];
         elements[0] = selfHashToken;
         elements[elements.length-1] = outputToken;
         for(int i=0; i<this.inputToken.size(); i++){
             elements[i+1] = inputToken.get(i);
         }
-        return String.join(",", elements);
+        // not using String.join(",", elements) to support Java 7
+        String codeToken = "";
+        for(int i=0; i<elements.length; i++){
+          codeToken = codeToken + elements[i] + ",";
+        }
+        codeToken = codeToken.substring(0, codeToken.length() - 1);
+        return codeToken;
     }
 }
