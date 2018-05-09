@@ -58,26 +58,34 @@ Add _argLine_ element under _configuration_, e.g.:
 
 ### Then, run the project's test suite using the following command
 
+*Note that you might need to run `mvn package` first.
+
 ```
 mvn surefire:test
 ```
-Alternatively, you can run a single test class as in the following example (where class name is `FunctionUtilsTest`)
-```
-mvn surefire:test -Dtest=FunctionUtilsTest
-```
-(notice that you might need to run `mvn package` first)
+Alternatively, you can just run a specific test class or a single test (see "useful operations" below).
 
 ### Useful maven/surefire operations:
 
-1. Running a single test. Example: class name = `GradientFunctionTest` and method name = `test2DDistance`
+1. Running a single test class. Example: class name = `FunctionUtilsTest`
+
 ```
-mvn surefire:test -Dtest=GradientFunctionTest#test2DDistance
+mvn surefire:test -Dtest=FunctionUtilsTest -fae
 ```
 
-2. Rebuild the whole project without running the test suit
+2. Running a single test method. Example: class name = `GradientFunctionTest`, method name = `test2DDistance`
+
 ```
-mvn install -DskipTests
+mvn surefire:test -Dtest=GradientFunctionTest#test2DDistance -fae
 ```
+
+3. Rebuild the whole project without running the test suit
+```
+mvn install -DskipTests -fae
+```
+
+4. Fail at End
+If `-fae` flag is present, the command will only fail the build afterward all test have finished
 
 ## References & Recognitions
 
