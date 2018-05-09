@@ -80,12 +80,12 @@ mvn surefire:test -Dtest=GradientFunctionTest#test2DDistance -fae
 ```
 
 3. Rebuild the whole project without running the test suit
+
 ```
 mvn install -DskipTests -fae
 ```
 
-4. Fail at End
-If `-fae` flag is present, the command will only fail the build afterward all test have finished
+4. Fail at End. If `-fae` flag is present, the command will only fail the build afterward all test have finished
 
 ## References & Recognitions
 
