@@ -46,14 +46,21 @@ java -javaagent:<full-path-to-agent.jar> -jar <full-path-to-target-jar.jar>
 
 Add _argLine_ element under _configuration_, e.g.:
 ```
-<plugin>
-  <groupId>org.apache.maven.plugins</groupId>
-  <artifactId>maven-surefire-plugin</artifactId>
-  <configuration>
-    <argLine>-javaagent:"<full-path-to-agent.jar>"</argLine>
+<build>
+  <plugins>
     ...
-  </configuration>
-</plugin>
+    <plugin>
+      <groupId>org.apache.maven.plugins</groupId>
+      <artifactId>maven-surefire-plugin</artifactId>
+      <configuration>
+        <argLine>-javaagent:"<full-path-to-agent.jar>"</argLine>
+        ...
+      </configuration>
+    </plugin>
+    ...
+  </plugins>
+  ...
+</build>
 ```
 
 ### Then, run the project's test suite using the following command
