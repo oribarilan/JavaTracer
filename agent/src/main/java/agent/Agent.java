@@ -23,9 +23,9 @@ public class Agent {
     public static boolean isPrintRecord = false;
 
     //sampling
-    public static boolean isSamplingEnabled = true;
-    public static double sampleRate = 0.05;
-    public static Random rand = new Random();
+    public static boolean isSamplingEnabled = false;
+    public static double sampleRate = 0.000001;
+
 
     //if true, tracer will switch output files every 20,000,000 records
     public static boolean isFileSwitch = false;
@@ -50,7 +50,7 @@ public class Agent {
                     writeMethodSrc.append("catch(Exception e){ System.out.println(\"$$$$$$$ EXCEPTION - cant instantiate bufferedwriter $$$$$$$\"); System.out.println(e.toString()); } ");
                     writeMethodSrc.append(" } ");
                     writeMethodSrc.append(" if(!lineSet.contains(content)) { bw.write(content); bw.flush(); writesNum++; lineSet.add(content); }");
-                    writeMethodSrc.append(" if(lineSet.size() > 50000000) { lineSet = new HashSet(); }");
+                    writeMethodSrc.append(" if(lineSet.size() > 5000000) { lineSet = new HashSet(); }");
                     writeMethodSrc.append(String.format("if(%s && writesNum > 20000000){ ", isFileSwitch));
                     writeMethodSrc.append("fileNum++;");
                     writeMethodSrc.append("bw.close();");
@@ -108,6 +108,7 @@ public class Agent {
                         cp.importPackage("java.io.FileWriter");
                         cp.importPackage("java.io.File");
                         cp.importPackage("java.util.HashSet");
+                        cp.importPackage("java.util.Random"); //TODO
                         CtClass cc = cp.makeClass("agent.SingleFileWriter");
                         AddWriteField(cc);
                         AddWriteMethod(cc);
@@ -146,9 +147,7 @@ public class Agent {
 		            boolean isNative = Modifier.isNative(method.getModifiers());
                 boolean isAbstract = Modifier.isAbstract(method.getModifiers());
                 boolean isTestMethod = lowerMethodName.contains("test");
-                boolean isUnlucky = rand.nextDouble() > sampleRate;
-                boolean shouldNotSample = isSamplingEnabled && isUnlucky;
-                return (isNative || isAbstract || isTestMethod || shouldNotSample);
+                return (isNative || isAbstract || isTestMethod);
 			}
 
             public void treatMethod(CtMethod method) throws IllegalClassFormatException{
@@ -157,11 +156,18 @@ public class Agent {
                     // m.addLocalVariable("elapsedTime", CtClass.longType);
                     MethodRecord record = new MethodRecord(method.getLongName(), GetSelfHashTokenFromMethod(method), GetInputTokenFromMethod(method), GetOutputTokenFromMethod(method));
                     // String afterCode = String.format("try{ %s; agent.SingleFileWriter.write(%s); } catch(NoClassDefFoundError e) { System.out.println(\"writer not found\"); }", record.DeclareRecordVariable(), MethodRecord.GetRecordVariableName());
-                    String afterCode = String.format("%s; agent.SingleFileWriter.write(%s);", record.DeclareRecordVariable(), MethodRecord.GetRecordVariableName());
+                    StringBuilder afterCode = new StringBuilder();
+                    afterCode.append("Random javaagent_rand = new Random();");
+                    afterCode.append(String.format("boolean javaagent_isLucky = javaagent_rand.nextDouble() < %.7f;", sampleRate));
+                    afterCode.append(String.format("boolean javaagent_shouldSample = %s && javaagent_isLucky;", isSamplingEnabled));
+                    afterCode.append("if (javaagent_shouldSample) {");
+                    afterCode.append(record.DeclareRecordVariable()+";");
+                    afterCode.append(String.format("agent.SingleFileWriter.write(%s);", MethodRecord.GetRecordVariableName()));
                     if(isPrintRecord){
-                        afterCode = afterCode + String.format("System.out.println(%s);",MethodRecord.GetRecordVariableName());
+                        afterCode.append(String.format("System.out.println(%s);",MethodRecord.GetRecordVariableName()));
                     }
-                    method.insertAfter(afterCode);
+                    afterCode.append("}");
+                    method.insertAfter(afterCode.toString());
                 }catch(Exception e){
                     System.out.println("$$$$ EXCEPTION - cant insert after $$$$");
                     System.out.println("Method name: "+method.getLongName());
@@ -210,7 +216,7 @@ public class Agent {
 	protected static String GetSelfHashTokenFromMethod(CtMethod m) throws NotFoundException {
 		String selfHashToken;
         if(Modifier.isStatic(m.getModifiers())){
-            selfHashToken = "\"STATIC\"";
+            selfHashToken = "\"S\"";
         }else{
             selfHashToken = "System.identityHashCode( $0 )";
         }
@@ -235,7 +241,7 @@ public class Agent {
 		String outputToken;
         CtClass retType = m.getReturnType();
         if(retType == CtClass.voidType){
-            outputToken = "\"VOID\"";
+            outputToken = "\"V\"";
         } else if (retType.isPrimitive()) {
             outputToken = "$_";
         } else {

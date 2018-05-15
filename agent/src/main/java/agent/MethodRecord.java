@@ -3,8 +3,12 @@ package agent;
 import java.util.List;
 
 public class MethodRecord {
+    public static final String PREFIX_COMMONMATH = "org.apache.commons.math3.";
+
+
     private String methodLongName;
-	private String selfHashToken;
+    private String minimalMethodLongName;
+    private String selfHashToken;
     private List<String> inputToken;
     private String outputToken;
 
@@ -18,6 +22,11 @@ public class MethodRecord {
         this.selfHashToken = selfHashToken;
         this.inputToken = inputToken;
         this.outputToken = outputToken;
+        //project-specific methodname optimization
+        this.minimalMethodLongName = this.methodLongName;
+        if(this.methodLongName.startsWith(PREFIX_COMMONMATH)){ //using replace to rename parameters as well
+          this.minimalMethodLongName = this.methodLongName.replace(PREFIX_COMMONMATH, "");
+        }
     }
 
     public static String GetRecordVariableName(){
@@ -29,7 +38,7 @@ public class MethodRecord {
         sb.append("String ");
         sb.append(GetRecordVariableName());
         sb.append(" = ");
-        sb.append("\""+this.methodLongName+"\""+"+\",\"+");
+        sb.append("\""+this.minimalMethodLongName+"\""+"+\",\"+");
         sb.append("\"\"+"+this.selfHashToken+"+\",\"+");
         for(int i=0; i<this.inputToken.size(); i++){
             sb.append("\"\"+"+this.inputToken.get(i)+"+\",\"+");
