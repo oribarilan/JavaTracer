@@ -6,6 +6,8 @@ import javassist.ClassPool;
 import javassist.CtClass;
 import javassist.CtField;
 import javassist.CtMethod;
+import javassist.CtBehavior;
+import javassist.CtConstructor;
 import javassist.CtNewMethod;
 import javassist.Modifier;
 import javassist.NotFoundException;
@@ -24,7 +26,7 @@ public class Agent {
 
     //sampling
     public static boolean isSamplingEnabled = false;
-    public static double sampleRate = 0.000001;
+    public static double sampleRate = 0.001;
 
 
     //if true, tracer will switch output files every 20,000,000 records
@@ -144,17 +146,30 @@ public class Agent {
                     return true;
                 }
                 String lowerMethodName = method.getLongName();
-		            boolean isNative = Modifier.isNative(method.getModifiers());
+                boolean isNative = Modifier.isNative(method.getModifiers());
                 boolean isAbstract = Modifier.isAbstract(method.getModifiers());
                 boolean isTestMethod = lowerMethodName.contains("test");
                 return (isNative || isAbstract || isTestMethod);
 			}
 
-            public void treatMethod(CtMethod method) throws IllegalClassFormatException{
+            public void treatMethod(CtBehavior method) throws IllegalClassFormatException{
+                //CtBehavior is either a method or a constructor
+                //for brevity, we use the variable name method
+                String behaviorLongName;
+                if(method instanceof CtMethod){
+                  behaviorLongName = ((CtMethod) method).getLongName();
+                }
+                else //constructor
+                {
+                  // from SomePackage.SomeClass(),123,1
+                  // to SomePackage.SomeClass.SomeClass(),123,1
+                  // so constructor have the same form as methods
+                  behaviorLongName = method.getLongName().replace("(", "."+method.getName()+"(");
+                }
                 try{
                     if(isDebug) System.out.println("Examining Method: "+method.getLongName());
                     // m.addLocalVariable("elapsedTime", CtClass.longType);
-                    MethodRecord record = new MethodRecord(method.getLongName(), GetSelfHashTokenFromMethod(method), GetInputTokenFromMethod(method), GetOutputTokenFromMethod(method));
+                    MethodRecord record = new MethodRecord(behaviorLongName, GetSelfHashTokenFromMethod(method), GetInputTokenFromMethod(method), GetOutputTokenFromMethod(method));
                     // String afterCode = String.format("try{ %s; agent.SingleFileWriter.write(%s); } catch(NoClassDefFoundError e) { System.out.println(\"writer not found\"); }", record.DeclareRecordVariable(), MethodRecord.GetRecordVariableName());
                     StringBuilder afterCode = new StringBuilder();
                     afterCode.append("Random javaagent_rand = new Random();");
@@ -201,6 +216,10 @@ public class Agent {
                             treatMethod(m);
                         }
                     }
+                    CtConstructor[] constructors = cc.getDeclaredConstructors();
+                    for(CtConstructor c : constructors){
+                      treatMethod(c);
+                    }
                     byte[] byteCode = cc.toBytecode();
                     cc.detach();
                     return byteCode;
@@ -213,7 +232,7 @@ public class Agent {
         });
     }
 
-	protected static String GetSelfHashTokenFromMethod(CtMethod m) throws NotFoundException {
+	protected static String GetSelfHashTokenFromMethod(CtBehavior m) throws NotFoundException {
 		String selfHashToken;
         if(Modifier.isStatic(m.getModifiers())){
             selfHashToken = "\"S\"";
@@ -223,7 +242,7 @@ public class Agent {
         return selfHashToken;
 	}
 
-    protected static List<String> GetInputTokenFromMethod(CtMethod m) throws NotFoundException {
+    protected static List<String> GetInputTokenFromMethod(CtBehavior m) throws NotFoundException {
         List<String> inputToken = new ArrayList<String>();
         CtClass[] pTypes = m.getParameterTypes();
         for(int i=0; i<pTypes.length; i++){
@@ -237,17 +256,23 @@ public class Agent {
         return inputToken;
 	}
 
-	protected static String GetOutputTokenFromMethod(CtMethod m) throws NotFoundException {
-		String outputToken;
-        CtClass retType = m.getReturnType();
-        if(retType == CtClass.voidType){
-            outputToken = "\"V\"";
-        } else if (retType.isPrimitive()) {
-            outputToken = "$_";
-        } else {
-            outputToken = " ($_ == null ? \"NULL\" : \"\"+System.identityHashCode( $_ )) ";
-        }
-        return outputToken;
+	protected static String GetOutputTokenFromMethod(CtBehavior m) throws NotFoundException {
+    String outputToken;
+    if(m instanceof CtMethod){
+      CtClass retType = ((CtMethod) m).getReturnType();
+      if(retType == CtClass.voidType){
+          outputToken = "\"V\"";
+      } else if (retType.isPrimitive()) {
+          outputToken = "$_";
+      } else {
+          outputToken = " ($_ == null ? \"NULL\" : \"\"+System.identityHashCode( $_ )) ";
+      }
+    }
+    else //constructor
+    {
+      outputToken = "\"C\"";
+    }
+    return outputToken;
 	}
 
 }

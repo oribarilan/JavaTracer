@@ -1,0 +1,53 @@
+[INFO] Scanning for projects...
+[INFO]
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Apache Commons Math 4.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO]
+[INFO] --- maven-surefire-plugin:2.19.1:test (default-cli) @ commons-math4 ---
+-------------------------------------------------------
+T E S T S
+-------------------------------------------------------
+Running org.apache.commons.math4.analysis.differentiation.GradientFunctionTest
+Tests run: 1, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 1.304 sec <<< FAILURE! - in org.apache.commons.math4.analysis.differentiation.GradientFunctionTest
+test2DDistance(org.apache.commons.math4.analysis.differentiation.GradientFunctionTest)  Time elapsed: 1.266 sec  <<< ERROR!
+java.lang.NullPointerException
+    at org.apache.commons.math4.analysis.differentiation.GradientFunctionTest.test2DDistance(GradientFunctionTest.java:39)
+Results :
+Tests in error:
+GradientFunctionTest.test2DDistance:39 ╗ NullPointer
+Tests run: 1, Failures: 0, Errors: 1, Skipped: 0
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time: 4.006 s
+[INFO] Finished at: 2017-12-12T20:24:30+02:00
+[INFO] Final Memory: 12M/243M
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:2.19.1:test (default-cli) on project commons-math4: There are test failures.
+[ERROR]
+[ERROR] Please refer to C:\personal-git\apache\commons-math\target\surefire-reports for the individual test results.
+[ERROR] -> [Help 1]
+[ERROR]
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR]
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException
+"""
+success_output_mock = """
+[INFO] Scanning for projects...
+[INFO]
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Apache Commons Math 4.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO]
+[INFO] --- maven-surefire-plugin:2.19.1:test (default-cli) @ commons-math4 ---
+-------------------------------------------------------
+T E S T S
+-------------------------------------------------------
+Running org.apache.commons.math4.analysis.FunctionUtilsTest
+Tests run: 19, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.266 sec - in org.apache.commons.math4.analysis.FunctionUtilsTest
+Results :
+Tests run: 19, Failures: 0, Errors: 0, Skipped: 0
+[INFO] ------------------------------------------------------------------------
