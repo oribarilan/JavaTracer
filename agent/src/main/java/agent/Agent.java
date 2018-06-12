@@ -22,11 +22,11 @@ import java.util.Random;
 
 public class Agent {
     public static boolean isDebug = false;
-    public static boolean isPrintRecord = false;
+    public static boolean isPrintRecord = true;
 
     //sampling
     public static boolean isSamplingEnabled = false;
-    public static double sampleRate = 0.001;
+    public static double sampleRate = 0.1;
 
 
     //if true, tracer will switch output files every 20,000,000 records
@@ -110,7 +110,7 @@ public class Agent {
                         cp.importPackage("java.io.FileWriter");
                         cp.importPackage("java.io.File");
                         cp.importPackage("java.util.HashSet");
-                        cp.importPackage("java.util.Random"); //TODO
+                        cp.importPackage("java.util.Random");
                         CtClass cc = cp.makeClass("agent.SingleFileWriter");
                         AddWriteField(cc);
                         AddWriteMethod(cc);
@@ -172,16 +172,19 @@ public class Agent {
                     MethodRecord record = new MethodRecord(behaviorLongName, GetSelfHashTokenFromMethod(method), GetInputTokenFromMethod(method), GetOutputTokenFromMethod(method));
                     // String afterCode = String.format("try{ %s; agent.SingleFileWriter.write(%s); } catch(NoClassDefFoundError e) { System.out.println(\"writer not found\"); }", record.DeclareRecordVariable(), MethodRecord.GetRecordVariableName());
                     StringBuilder afterCode = new StringBuilder();
-                    afterCode.append("Random javaagent_rand = new Random();");
-                    afterCode.append(String.format("boolean javaagent_isLucky = javaagent_rand.nextDouble() < %.7f;", sampleRate));
-                    afterCode.append(String.format("boolean javaagent_shouldSample = %s && javaagent_isLucky;", isSamplingEnabled));
-                    afterCode.append("if (javaagent_shouldSample) {");
                     afterCode.append(record.DeclareRecordVariable()+";");
+                    afterCode.append(String.format("if (!%s) {", isSamplingEnabled));
                     afterCode.append(String.format("agent.SingleFileWriter.write(%s);", MethodRecord.GetRecordVariableName()));
+                    afterCode.append("}else{");
+                    afterCode.append("Random javaagent_rand = new Random();");
+                    afterCode.append(String.format("boolean javaagent_shouldSample = javaagent_rand.nextDouble() < %.7f;", sampleRate));
+                    afterCode.append("if (javaagent_shouldSample) {");
+                    afterCode.append(String.format("agent.SingleFileWriter.write(%s);", MethodRecord.GetRecordVariableName()));
+                    afterCode.append("}");
+                    afterCode.append("}");
                     if(isPrintRecord){
                         afterCode.append(String.format("System.out.println(%s);",MethodRecord.GetRecordVariableName()));
                     }
-                    afterCode.append("}");
                     method.insertAfter(afterCode.toString());
                 }catch(Exception e){
                     System.out.println("$$$$ EXCEPTION - cant insert after $$$$");
