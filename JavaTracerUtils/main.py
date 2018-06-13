@@ -20,7 +20,7 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 # endregion
 
-DEBUG = True
+DEBUG = False
 
 if DEBUG:
     # sample file

@@ -13,6 +13,8 @@ class TestInfo(object):
         self.tfile_name = tfile_name
         self.tmethod_name = tmethod_name
         self.tmethod_fullname = f"{tfile_name}.{tmethod_name}"  # class_name.method_name
+        self.packages_class_method_fullname = '.'.join(tfile_full_path.replace('\\','.').split('.')[-4:-1]) \
+                                              + '.' + tmethod_name
         self.tannotations = tannotations_lst
         self.is_faulty = None
 
@@ -26,6 +28,8 @@ class TestInfo(object):
             print("WARNING - unexpected result from mvn surefire")
             print(test_output_str_result)
             print("WARNING- unexpected result from mvn surefire")
+            self.is_faulty = False
+            return
         result_dirty = test_output_str_result[result_idx:]
         result = result_dirty[:result_dirty.find('\n')]
         result_vector = re.findall('\\b\\d+\\b', result)  # ['1', '0', '0', '0']

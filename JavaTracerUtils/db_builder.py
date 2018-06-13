@@ -10,6 +10,7 @@ import sqlite3
 import subprocess
 import uuid
 from typing import TextIO, Dict, FrozenSet
+from test_info import TestInfo
 
 from test_suite_information import TestSuiteInformation
 from trace import Trace
@@ -24,7 +25,8 @@ MAX_SIZE_FOR_TRACE_FILE_IN_MB = 100
 class MavenTestTraceDbFactory(object):
 
     def __init__(self, test_files_list_path, project_root_path, log_file_path, output_data_root_path,
-                 bug_project, bug_id: int, actual_faults_method_fullname_set: FrozenSet[str]):
+                 bug_project, bug_id: int, actual_faults_method_fullname_set: FrozenSet[str],
+                 on_the_fly: bool=True):
         """
         Invoking this class will initially create the following raw data:
         ...\<test_class_name>\<test_method_name>\tmethod_info.log -
@@ -62,11 +64,23 @@ class MavenTestTraceDbFactory(object):
 
         # build
         logger.info(f'building bugdb at {self.output_data_path} - start')
+
         self.db = sqlite3.connect(path.join(self.output_data_path, 'bugdb.sqlite'))
+        cursor = self.db.cursor()
+        cursor.execute('PRAGMA synchronous = OFF')
+        cursor.execute('PRAGMA journal_mode = OFF')  # disable logging for performance
+        cursor.close()
+
         self.db_create_tables()
-        self.build_raw_data()
-        self.db_ingest_data()
+        # traces and outcomes
+        self.invoke_individual_tests_with_tracer(on_the_fly)
+        if not on_the_fly:
+            self.db_ingest_data_from_intermediate_files()
+        # methods index
+        self.db_ingest_methods()
         self.db_create_indexes()
+
+        self.db.close()
         logger.info('done building MavenTestTraceDbFactory')
 
     @staticmethod
@@ -84,14 +98,17 @@ class MavenTestTraceDbFactory(object):
             logger.info(f"total of {len(tsuite_info.tinfos)} valid test methods")
         return tsuite_info
 
-    def invoke_individual_tests_with_tracer(self):
+    def invoke_individual_tests_with_tracer(self, on_the_fly: bool):
         # run each test to get results
         total = len(self.tsuite_info.tinfos)
         for idx, tinfo in enumerate(self.tsuite_info.tinfos):
             logger.debug(f"{idx+1}/{total}\t\t: handling {tinfo.tfile_name}, {tinfo.tmethod_name}")
             output = self.run_test(tinfo.tfile_name, tinfo.tmethod_name)
             tinfo.add_result_from_output(output)
-            self.route_traces_to_test_folder(tinfo.tfile_name, tinfo.tmethod_name)
+            if on_the_fly:
+                self.db_ingest_test_to_bugdb(tinfo)
+            else:
+                self.route_traces_to_test_folder(tinfo.tfile_name, tinfo.tmethod_name)
         logger.debug(f"invoked 100% of all test methods")
         logger.info(f'each test class and test method tracer were stored at: "{self.output_data_path}"')
 
@@ -107,6 +124,38 @@ class MavenTestTraceDbFactory(object):
         output = subprocess.run(command, stdout=subprocess.PIPE, shell=True, cwd=self.project_root_path)
         surefire_output = output.stdout.decode(encoding='utf-8', errors='ignore')
         return surefire_output
+
+    def db_ingest_test_to_bugdb(self, tinfo: TestInfo):
+        cursor = self.db.cursor()
+        if tinfo.tmethod_fullname not in self.map_from_methodfullname_to_guid:
+            self.map_from_methodfullname_to_guid[tinfo.tmethod_fullname] = self.gen_method_id()
+
+        # ingest outcomes
+        outcomes = (self.map_from_methodfullname_to_guid[tinfo.tmethod_fullname], int(tinfo.is_faulty))
+        cursor.execute('''
+                  INSERT INTO outcomes(tmid, is_faulty)
+                  VALUES(?,?)
+                  ''', outcomes)
+
+        # ingest traces
+        if os.path.exists(self.log_file_path):
+            with open(self.log_file_path, mode="r") as log_file:
+                traces_generator = self.create_generator_from_logs(tinfo.tmethod_fullname, log_file)
+                cursor.executemany('''
+                            INSERT INTO traces(tmid, mid, vector)
+                            VALUES(?,?,?)
+                            ''', traces_generator)
+        else:
+            logger.warning('log file was not created (probably due to random sampling)')
+        self.db.commit()
+        cursor.close()
+
+        # remove log file
+        if os.path.isfile(self.log_file_path):
+            os.remove(self.log_file_path)
+        else:
+            logger.warning(f"log file is missing but should exists at {self.log_file_path}")
+
 
     def route_traces_to_test_folder(self, tfile_name, tmethod_name):
         """
@@ -152,10 +201,7 @@ class MavenTestTraceDbFactory(object):
                 methodset.add(trace.split(',')[0])
         return methodset
 
-    def build_raw_data(self):
-        self.invoke_individual_tests_with_tracer()
-
-    def db_ingest_data(self):
+    def db_ingest_data_from_intermediate_files(self):
         logger.info("ingesting data to db - start")
         cursor = self.db.cursor()
         for tinfo in self.tsuite_info.tinfos:
@@ -170,7 +216,6 @@ class MavenTestTraceDbFactory(object):
                   INSERT INTO outcomes(tmid, is_faulty)
                   VALUES(?,?)
                   ''', outcomes)
-        self.db.commit()
 
         # ingest traces
         logger.info("ingesting data to db step 2 of 3 - ingesting traces")
@@ -185,8 +230,10 @@ class MavenTestTraceDbFactory(object):
                             VALUES(?,?,?)
                             ''', traces_generator)
         self.db.commit()
+        cursor.close()
 
-        # ingest methods
+    def db_ingest_methods(self):
+        cursor = self.db.cursor()
         logger.info("ingesting data to db step 3 of 3 - ingesting methods")
         # flipping (method_id, method_name) intentionally
         values = [(method_id, method_name, 1) if method_name in self.actual_faults_method_fullname_set
@@ -197,11 +244,12 @@ class MavenTestTraceDbFactory(object):
                         VALUES(?,?,?)
                         ''', values)
         self.db.commit()
+        cursor.close()
 
     def gen_method_id(self):
         # there is no need to use the whole guid
-        unique_mid = str(uuid.uuid4())
-        return unique_mid[:unique_mid.index('-')]
+        return str(uuid.uuid4())
+        # return unique_mid[:unique_mid.index('-')]
 
     def create_generator_from_logs(self, tmid_name: str, log_file: TextIO):
         '''
@@ -227,7 +275,6 @@ class MavenTestTraceDbFactory(object):
                 is_faulty INTEGER
             )
         ''')
-        self.db.commit()
         cursor.execute('''
             CREATE TABLE traces(
                 tmid TEXT, 
@@ -236,7 +283,6 @@ class MavenTestTraceDbFactory(object):
                 FOREIGN KEY(tmid) REFERENCES outcomes(tmid)
             )
         ''')
-        self.db.commit()
         cursor.execute('''
             CREATE TABLE methods(
                 method_id TEXT PRIMARY KEY, 
@@ -245,6 +291,7 @@ class MavenTestTraceDbFactory(object):
             )
         ''')
         self.db.commit()
+        cursor.close()
 
     def db_create_indexes(self):
         logger.info('building bugdb at {self.output_data_path} - adding post-ingestion indexes')
@@ -254,17 +301,16 @@ class MavenTestTraceDbFactory(object):
                     `tmid`
                 )
         ''')
-        self.db.commit()
         cursor.execute('''
                 CREATE INDEX `idx_traces_mids` ON `traces` (
                     `mid`
                 )
         ''')
-        self.db.commit()
         cursor.execute('''
                 CREATE INDEX `idx_methods_isfaulty` ON `methods` (
                     `has_real_faulty`
                 )
         ''')
         self.db.commit()
+        cursor.close()
 

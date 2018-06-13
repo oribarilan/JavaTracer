@@ -25,8 +25,8 @@ public class Agent {
     public static boolean isPrintRecord = false;
 
     //sampling
-    public static boolean isSamplingEnabled = false;
-    public static double sampleRate = 0.001;
+    public static boolean isSamplingEnabled = true;
+    public static double sampleRate = 0.05;
 
 
     //if true, tracer will switch output files every 20,000,000 records
