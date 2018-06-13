@@ -22,11 +22,11 @@ import java.util.Random;
 
 public class Agent {
     public static boolean isDebug = false;
-    public static boolean isPrintRecord = true;
+    public static boolean isPrintRecord = false;
 
     //sampling
     public static boolean isSamplingEnabled = false;
-    public static double sampleRate = 0.1;
+    public static double sampleRate = 0.001;
 
 
     //if true, tracer will switch output files every 20,000,000 records
@@ -52,7 +52,7 @@ public class Agent {
                     writeMethodSrc.append("catch(Exception e){ System.out.println(\"$$$$$$$ EXCEPTION - cant instantiate bufferedwriter $$$$$$$\"); System.out.println(e.toString()); } ");
                     writeMethodSrc.append(" } ");
                     writeMethodSrc.append(" if(!lineSet.contains(content)) { bw.write(content); bw.flush(); writesNum++; lineSet.add(content); }");
-                    writeMethodSrc.append(" if(lineSet.size() > 5000000) { lineSet = new HashSet(); }");
+                    writeMethodSrc.append(" if(lineSet.size() > 50000) { lineSet = new HashSet(); }");
                     writeMethodSrc.append(String.format("if(%s && writesNum > 20000000){ ", isFileSwitch));
                     writeMethodSrc.append("fileNum++;");
                     writeMethodSrc.append("bw.close();");

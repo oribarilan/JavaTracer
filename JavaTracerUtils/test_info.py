@@ -12,7 +12,7 @@ class TestInfo(object):
         self.tfile_full_path = tfile_full_path
         self.tfile_name = tfile_name
         self.tmethod_name = tmethod_name
-        self.tmethod_fullname = f"{tfile_name}.{tmethod_name}"
+        self.tmethod_fullname = f"{tfile_name}.{tmethod_name}"  # class_name.method_name
         self.tannotations = tannotations_lst
         self.is_faulty = None
 
@@ -22,12 +22,15 @@ class TestInfo(object):
         :return:
         """
         result_idx = test_output_str_result.rfind("Tests run: 1")
-        assert result_idx != -1, "did not run a single test"
+        if result_idx == -1:
+            print("WARNING - unexpected result from mvn surefire")
+            print(test_output_str_result)
+            print("WARNING- unexpected result from mvn surefire")
         result_dirty = test_output_str_result[result_idx:]
         result = result_dirty[:result_dirty.find('\n')]
         result_vector = re.findall('\\b\\d+\\b', result)  # ['1', '0', '0', '0']
         result_vector = list(map(int, result_vector))
         num_of_tests, failures, errors, skipped = result_vector[0], result_vector[1], result_vector[2], result_vector[3]
-        assert num_of_tests == 1  # expecting only 1 test
+        assert num_of_tests < 2  # expecting only 1 test, allowing zero
         self.is_faulty = (failures + errors > 0)  # failed tests often result in an error
         assert skipped == 0  # test was skipped

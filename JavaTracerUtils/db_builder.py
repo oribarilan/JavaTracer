@@ -24,7 +24,7 @@ MAX_SIZE_FOR_TRACE_FILE_IN_MB = 100
 class MavenTestTraceDbFactory(object):
 
     def __init__(self, test_files_list_path, project_root_path, log_file_path, output_data_root_path,
-                 bug_project, bug_id: int, actual_faults_method_name_set: FrozenSet[str]):
+                 bug_project, bug_id: int, actual_faults_method_fullname_set: FrozenSet[str]):
         """
         Invoking this class will initially create the following raw data:
         ...\<test_class_name>\<test_method_name>\tmethod_info.log -
@@ -42,7 +42,9 @@ class MavenTestTraceDbFactory(object):
         :param project_root_path: the root path for the project (e.g. "C:\git-opensource\commons-math")
         :param log_file_path: the path for the file with all of the traces (e.g. "C:\git-opensource\commons-math\traces0.log")
         :param output_data_root_path: root path to dump all data
+        :param actual_faults_method_fullname_set: a frozenset of the real faulty methods (full names)
         """
+        # define
         self.bug_project = bug_project
         self.bug_id = bug_id
         self.tsuite_info = self.get_test_suit_info(test_files_list_path)
@@ -51,9 +53,11 @@ class MavenTestTraceDbFactory(object):
         assert not os.path.exists(self.log_file_path), f'log file at {self.log_file_path} exists, delete it'
         self.output_data_path = path.join(output_data_root_path, bug_project, str(bug_id))
         assert not os.path.exists(self.output_data_path), f'path {self.output_data_path} exists, clean previous data'
+        self.actual_faults_method_fullname_set = actual_faults_method_fullname_set
+
+        # build
         self.build_raw_data()
         self.build_sqlite_db()
-        self.actual_faults_method_name_set = actual_faults_method_name_set
         logger.info('done building MavenTestTraceDbFactory')
 
     @staticmethod
@@ -73,15 +77,12 @@ class MavenTestTraceDbFactory(object):
 
     def invoke_individual_tests_with_tracer(self):
         # run each test to get results
-        print_count = 0
+        total = len(self.tsuite_info.tinfos)
         for idx, tinfo in enumerate(self.tsuite_info.tinfos):
+            logger.debug(f"{idx+1}/{total}\t\t: handling {tinfo.tfile_name}, {tinfo.tmethod_name}")
             output = self.run_test(tinfo.tfile_name, tinfo.tmethod_name)
             tinfo.add_result_from_output(output)
             self.route_traces_to_test_folder(tinfo.tfile_name, tinfo.tmethod_name)
-            if idx + 1 == print_count:
-                logger.debug(f"invoked {idx +1} out of {len(self.tsuite_info.tinfos)} test methods")
-                print_count = 0
-            print_count += 1
         logger.debug(f"invoked 100% of all test methods")
         logger.info(f'each test class and test method tracer were stored at: "{self.output_data_path}"')
 
@@ -94,7 +95,6 @@ class MavenTestTraceDbFactory(object):
         """
         command = f"mvn -f={self.project_root_path}\\pom.xml surefire:test -Dtest={test_class_name}#{test_method_name}"
         command = command.split(' ')
-        logger.debug(f"handling {test_class_name}, {test_method_name}")
         output = subprocess.run(command, stdout=subprocess.PIPE, shell=True, cwd=self.project_root_path)
         surefire_output = output.stdout.decode(encoding='utf-8', errors='ignore')
         return surefire_output
@@ -109,7 +109,8 @@ class MavenTestTraceDbFactory(object):
         test_dir = f"{self.output_data_path}\\{tfile_name}\\{tmethod_name}"
         if not os.path.exists(test_dir):
             os.makedirs(test_dir)
-        os.rename(src=self.log_file_path, dst=f"{test_dir}\\test_method_traces.log")
+        if os.path.exists(self.log_file_path):  # could be missing if agent sampling is ON
+            os.rename(src=self.log_file_path, dst=f"{test_dir}\\test_method_traces.log")
 
     def create_tmethod_info_files(self):
         """
@@ -158,7 +159,7 @@ class MavenTestTraceDbFactory(object):
         map_from_methodfullname_to_guid = dict()
         for tinfo in self.tsuite_info.tinfos:
             if tinfo.tmethod_fullname not in map_from_methodfullname_to_guid:
-                map_from_methodfullname_to_guid[tinfo.tmethod_fullname] = str(uuid.uuid4())
+                map_from_methodfullname_to_guid[tinfo.tmethod_fullname] = self.gen_method_id()
 
         # ingest outcomes
         logger.info("ingesting data to db step 1 of 3 - ingesting outcomes")
@@ -187,7 +188,7 @@ class MavenTestTraceDbFactory(object):
         # ingest methods
         logger.info("ingesting data to db step 3 of 3 - ingesting methods")
         # flipping (method_id, method_name) intentionally
-        values = [(method_id, method_name, 1) if method_name in actual_faults_method_name_set
+        values = [(method_id, method_name, 1) if method_name in self.actual_faults_method_fullname_set
                   else (method_id, method_name, 0)
                   for (method_name, method_id) in map_from_methodfullname_to_guid.items()]
         cursor.executemany('''
@@ -196,13 +197,17 @@ class MavenTestTraceDbFactory(object):
                         ''', values)
         db.commit()
 
-    @staticmethod
-    def create_generator_from_logs(tmid: str, log_file: TextIO, map_from_methodfullname_to_guid: Dict[str, str]):
+    def gen_method_id(self):
+        # there is no need to use the whole guid
+        unique_mid = str(uuid.uuid4())
+        return unique_mid[:unique_mid.index('-')]
+
+    def create_generator_from_logs(self, tmid: str, log_file: TextIO, map_from_methodfullname_to_guid: Dict[str, str]):
         for log in log_file:
             trace = Trace(tmid, log)
             trace.tmid = map_from_methodfullname_to_guid[trace.tmid]
             if trace.mid not in map_from_methodfullname_to_guid:
-                map_from_methodfullname_to_guid[trace.mid] = str(uuid.uuid4())
+                map_from_methodfullname_to_guid[trace.mid] = self.gen_method_id()
             trace.mid = map_from_methodfullname_to_guid[trace.mid]
             yield (trace.tmid, trace.mid, trace.vector)
 
@@ -246,6 +251,12 @@ class MavenTestTraceDbFactory(object):
         cursor.execute('''
                 CREATE INDEX `idx_traces_mids` ON `traces` (
                     `mid`
+                )
+        ''')
+        db.commit()
+        cursor.execute('''
+                CREATE INDEX `idx_methods_isfaulty` ON `methods` (
+                    `is_faulty`
                 )
         ''')
         db.commit()

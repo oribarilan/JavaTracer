@@ -3,6 +3,8 @@
 A maven project containing a Java-Agent that, when attached, traces all method invocations.
 The goal of this project is to instrument a java program such that rich traces of the test-suite would be available, for automated fault localization techniques. However, it may be useful for many other use cases.
 
+Version `1.1` (see 'Updates' for more information)
+
 ## Description & Features
 
   - `traces.txt` file will be created, containing all of the traces
@@ -13,6 +15,11 @@ The goal of this project is to instrument a java program such that rich traces o
     -   If method has parameters, the arguments (value for primitive parameters, `hashcode` for non-primitive parameters)
     -   If finishes succesfully, the return value (value for primitive return type, `hashcode` for non-primitive return type, `VOID` for void return types)
     -   If does not finish succesfully (e.g. exception was thrown), instead of the above return value, the trace will contain "EXCEPTION" - **Work In Progress**
+
+## Setup & Parameters
+
+  - If you would like to remove a common prefix from all traces, please view the `PREFIX_COMMONMATH` constant in `MethodRecord.java`
+  - TODO: explain sampleRate
 
 ## Prerequisites
 
@@ -93,6 +100,12 @@ mvn install -DskipTests -fae
 ```
 
 4. Fail at End. If `-fae` flag is present, the command will only fail the build afterward all test have finished
+
+## Versions
+
+#### 1.1
+- Added tracing support for constructors
+- Some optimizations
 
 ## References & Recognitions
 
