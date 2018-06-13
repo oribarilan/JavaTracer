@@ -54,6 +54,7 @@ class MavenTestTraceDbFactory(object):
         self.output_data_path = path.join(output_data_root_path, bug_project, str(bug_id))
         assert not os.path.exists(self.output_data_path), f'path {self.output_data_path} exists, clean previous data'
         self.actual_faults_method_fullname_set = actual_faults_method_fullname_set
+        self.map_from_methodfullname_to_guid = dict()
 
         # prepare
         if not os.path.exists(self.output_data_path):
@@ -157,14 +158,13 @@ class MavenTestTraceDbFactory(object):
     def db_ingest_data(self):
         logger.info("ingesting data to db - start")
         cursor = self.db.cursor()
-        map_from_methodfullname_to_guid = dict()
         for tinfo in self.tsuite_info.tinfos:
-            if tinfo.tmethod_fullname not in map_from_methodfullname_to_guid:
-                map_from_methodfullname_to_guid[tinfo.tmethod_fullname] = self.gen_method_id()
+            if tinfo.tmethod_fullname not in self.map_from_methodfullname_to_guid:
+                self.map_from_methodfullname_to_guid[tinfo.tmethod_fullname] = self.gen_method_id()
 
         # ingest outcomes
         logger.info("ingesting data to db step 1 of 3 - ingesting outcomes")
-        outcomes = [(map_from_methodfullname_to_guid[tinfo.tmethod_fullname], int(tinfo.is_faulty))
+        outcomes = [(self.map_from_methodfullname_to_guid[tinfo.tmethod_fullname], int(tinfo.is_faulty))
                     for tinfo in self.tsuite_info.tinfos]
         cursor.executemany('''
                   INSERT INTO outcomes(tmid, is_faulty)
@@ -177,9 +177,9 @@ class MavenTestTraceDbFactory(object):
         # example: r"C:\personal-git\Thesis\ThesisScripts\data\**\*.log"
         generic_path_to_traces_log_file = path.join(self.output_data_path, '**', TEST_METHOD_TRACES_LOG_FILENAME)
         for logfilename in glob.iglob(generic_path_to_traces_log_file, recursive=True):
-            tmid = '.'.join(logfilename.split('\\')[-3:-1])
+            tmid_name = '.'.join(logfilename.split('\\')[-3:-1])
             with open(logfilename, mode="r") as log_file:
-                traces_generator = self.create_generator_from_logs(tmid, log_file, map_from_methodfullname_to_guid)
+                traces_generator = self.create_generator_from_logs(tmid_name, log_file)
                 cursor.executemany('''
                             INSERT INTO traces(tmid, mid, vector)
                             VALUES(?,?,?)
@@ -191,7 +191,7 @@ class MavenTestTraceDbFactory(object):
         # flipping (method_id, method_name) intentionally
         values = [(method_id, method_name, 1) if method_name in self.actual_faults_method_fullname_set
                   else (method_id, method_name, 0)
-                  for (method_name, method_id) in map_from_methodfullname_to_guid.items()]
+                  for (method_name, method_id) in self.map_from_methodfullname_to_guid.items()]
         cursor.executemany('''
                         INSERT INTO methods(method_id, method_name, has_real_faulty)
                         VALUES(?,?,?)
@@ -203,14 +203,20 @@ class MavenTestTraceDbFactory(object):
         unique_mid = str(uuid.uuid4())
         return unique_mid[:unique_mid.index('-')]
 
-    def create_generator_from_logs(self, tmid: str, log_file: TextIO, map_from_methodfullname_to_guid: Dict[str, str]):
+    def create_generator_from_logs(self, tmid_name: str, log_file: TextIO):
+        '''
+        :param tmid_name: identifier for the test method, example: 'BigFractionFormatTest.testDenominatorFormat'
+        :param log_file: file handler for the log file
+        :param map_from_methodfullname_to_guid:
+        :return:
+        '''
         for log in log_file:
-            trace = Trace(tmid, log)
-            trace.tmid = map_from_methodfullname_to_guid[trace.tmid]
-            if trace.mid not in map_from_methodfullname_to_guid:
-                map_from_methodfullname_to_guid[trace.mid] = self.gen_method_id()
-            trace.mid = map_from_methodfullname_to_guid[trace.mid]
-            yield (trace.tmid, trace.mid, trace.vector)
+            trace = Trace(tmid_name, log)
+            trace.tmid_guid = self.map_from_methodfullname_to_guid[trace.tmid_name]
+            if trace.mid_name not in self.map_from_methodfullname_to_guid:
+                self.map_from_methodfullname_to_guid[trace.mid_name] = self.gen_method_id()
+            trace.mid_guid = self.map_from_methodfullname_to_guid[trace.mid_name]
+            yield (trace.tmid_guid, trace.mid_guid, trace.vector)
 
     def db_create_tables(self):
         logger.info('building bugdb at {self.output_data_path} - creating tables')
