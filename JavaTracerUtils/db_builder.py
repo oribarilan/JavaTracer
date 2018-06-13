@@ -55,9 +55,17 @@ class MavenTestTraceDbFactory(object):
         assert not os.path.exists(self.output_data_path), f'path {self.output_data_path} exists, clean previous data'
         self.actual_faults_method_fullname_set = actual_faults_method_fullname_set
 
+        # prepare
+        if not os.path.exists(self.output_data_path):
+            os.makedirs(self.output_data_path)
+
         # build
+        logger.info(f'building bugdb at {self.output_data_path} - start')
+        self.db = sqlite3.connect(path.join(self.output_data_path, 'bugdb.sqlite'))
+        self.db_create_tables()
         self.build_raw_data()
-        self.build_sqlite_db()
+        self.db_ingest_data()
+        self.db_create_indexes()
         logger.info('done building MavenTestTraceDbFactory')
 
     @staticmethod
@@ -114,6 +122,7 @@ class MavenTestTraceDbFactory(object):
 
     def create_tmethod_info_files(self):
         """
+        TODO delete this
         create file with the information about the each test method
         """
         logger.info('listing all methods participated in a test')
@@ -144,18 +153,10 @@ class MavenTestTraceDbFactory(object):
 
     def build_raw_data(self):
         self.invoke_individual_tests_with_tracer()
-        self.create_tmethod_info_files()
 
-    def build_sqlite_db(self):
-        logger.info(f'building bugdb at {self.output_data_path} - start')
-        db = sqlite3.connect(path.join(self.output_data_path, 'bugdb.sqlite'))
-        self.db_create_tables(db)
-        self.db_ingest_data(db)
-        self.db_create_indexes(db)
-
-    def db_ingest_data(self, db):
+    def db_ingest_data(self):
         logger.info("ingesting data to db - start")
-        cursor = db.cursor()
+        cursor = self.db.cursor()
         map_from_methodfullname_to_guid = dict()
         for tinfo in self.tsuite_info.tinfos:
             if tinfo.tmethod_fullname not in map_from_methodfullname_to_guid:
@@ -169,7 +170,7 @@ class MavenTestTraceDbFactory(object):
                   INSERT INTO outcomes(tmid, is_faulty)
                   VALUES(?,?)
                   ''', outcomes)
-        db.commit()
+        self.db.commit()
 
         # ingest traces
         logger.info("ingesting data to db step 2 of 3 - ingesting traces")
@@ -183,7 +184,7 @@ class MavenTestTraceDbFactory(object):
                             INSERT INTO traces(tmid, mid, vector)
                             VALUES(?,?,?)
                             ''', traces_generator)
-        db.commit()
+        self.db.commit()
 
         # ingest methods
         logger.info("ingesting data to db step 3 of 3 - ingesting methods")
@@ -192,10 +193,10 @@ class MavenTestTraceDbFactory(object):
                   else (method_id, method_name, 0)
                   for (method_name, method_id) in map_from_methodfullname_to_guid.items()]
         cursor.executemany('''
-                        INSERT INTO methods(method_id, method_name, is_faulty)
+                        INSERT INTO methods(method_id, method_name, has_real_faulty)
                         VALUES(?,?,?)
                         ''', values)
-        db.commit()
+        self.db.commit()
 
     def gen_method_id(self):
         # there is no need to use the whole guid
@@ -211,16 +212,16 @@ class MavenTestTraceDbFactory(object):
             trace.mid = map_from_methodfullname_to_guid[trace.mid]
             yield (trace.tmid, trace.mid, trace.vector)
 
-    def db_create_tables(self, db):
+    def db_create_tables(self):
         logger.info('building bugdb at {self.output_data_path} - creating tables')
-        cursor = db.cursor()
+        cursor = self.db.cursor()
         cursor.execute('''
             CREATE TABLE outcomes(
                 tmid TEXT PRIMARY KEY, 
                 is_faulty INTEGER
             )
         ''')
-        db.commit()
+        self.db.commit()
         cursor.execute('''
             CREATE TABLE traces(
                 tmid TEXT, 
@@ -229,35 +230,35 @@ class MavenTestTraceDbFactory(object):
                 FOREIGN KEY(tmid) REFERENCES outcomes(tmid)
             )
         ''')
-        db.commit()
+        self.db.commit()
         cursor.execute('''
             CREATE TABLE methods(
                 method_id TEXT PRIMARY KEY, 
                 method_name TEXT,
-                is_faulty INTEGER
+                has_real_faulty INTEGER
             )
         ''')
-        db.commit()
+        self.db.commit()
 
-    def db_create_indexes(self, db):
+    def db_create_indexes(self):
         logger.info('building bugdb at {self.output_data_path} - adding post-ingestion indexes')
-        cursor = db.cursor()
+        cursor = self.db.cursor()
         cursor.execute('''
                 CREATE INDEX `idx_traces_tmids` ON `traces` (
                     `tmid`
                 )
         ''')
-        db.commit()
+        self.db.commit()
         cursor.execute('''
                 CREATE INDEX `idx_traces_mids` ON `traces` (
                     `mid`
                 )
         ''')
-        db.commit()
+        self.db.commit()
         cursor.execute('''
                 CREATE INDEX `idx_methods_isfaulty` ON `methods` (
-                    `is_faulty`
+                    `has_real_faulty`
                 )
         ''')
-        db.commit()
+        self.db.commit()
 
