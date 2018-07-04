@@ -26,7 +26,7 @@ class MavenTestTraceDbFactory(object):
 
     def __init__(self, test_files_list_path, project_root_path, log_file_path, output_data_root_path,
                  bug_project, bug_id: int, actual_faults_method_fullname_set: FrozenSet[str],
-                 on_the_fly: bool=True):
+                 on_the_fly: bool, bug_configurations_to_log: Dict[str, str]):
         """
         Invoking this class will initially create the following raw data:
         ...\<test_class_name>\<test_method_name>\tmethod_info.log -
@@ -65,11 +65,7 @@ class MavenTestTraceDbFactory(object):
         # build
         logger.info(f'building bugdb at {self.output_data_path} - start')
 
-        self.db = sqlite3.connect(path.join(self.output_data_path, 'bugdb.sqlite'))
-        cursor = self.db.cursor()
-        cursor.execute('PRAGMA synchronous = OFF')
-        cursor.execute('PRAGMA journal_mode = OFF')  # disable logging for performance
-        cursor.close()
+        self.db = self.db_init(bug_configurations_to_log)
 
         self.db_create_tables()
         # traces and outcomes
@@ -82,6 +78,29 @@ class MavenTestTraceDbFactory(object):
 
         self.db.close()
         logger.info('done building MavenTestTraceDbFactory')
+
+    def db_init(self, bug_configurations_to_log):
+        db = sqlite3.connect(path.join(self.output_data_path, 'bugdb.sqlite'))
+        cursor = db.cursor()
+        cursor.execute('PRAGMA synchronous = OFF')
+        cursor.execute('PRAGMA journal_mode = OFF')  # disable logging for performance
+
+        cursor.execute('''
+            CREATE TABLE metadata(
+                name TEXT, 
+                value TEXT
+            )
+        ''')
+
+        cursor.executemany('''
+                  INSERT INTO metadata(name, value)
+                  VALUES(?,?)
+                  ''', bug_configurations_to_log.items())
+
+        db.commit()
+        cursor.close()
+
+        return db
 
     @staticmethod
     def get_test_suit_info(test_files_list_path, filter_out_invalid=True):
@@ -127,11 +146,11 @@ class MavenTestTraceDbFactory(object):
 
     def db_ingest_test_to_bugdb(self, tinfo: TestInfo):
         cursor = self.db.cursor()
-        if tinfo.tmethod_fullname not in self.map_from_methodfullname_to_guid:
-            self.map_from_methodfullname_to_guid[tinfo.tmethod_fullname] = self.gen_method_id()
+        if tinfo.packages_class_method_fullname not in self.map_from_methodfullname_to_guid:
+            self.map_from_methodfullname_to_guid[tinfo.packages_class_method_fullname] = self.gen_method_id()
 
         # ingest outcomes
-        outcomes = (self.map_from_methodfullname_to_guid[tinfo.tmethod_fullname], int(tinfo.is_faulty))
+        outcomes = (self.map_from_methodfullname_to_guid[tinfo.packages_class_method_fullname], int(tinfo.is_faulty))
         cursor.execute('''
                   INSERT INTO outcomes(tmid, is_faulty)
                   VALUES(?,?)
@@ -140,7 +159,7 @@ class MavenTestTraceDbFactory(object):
         # ingest traces
         if os.path.exists(self.log_file_path):
             with open(self.log_file_path, mode="r") as log_file:
-                traces_generator = self.create_generator_from_logs(tinfo.tmethod_fullname, log_file)
+                traces_generator = self.create_generator_from_logs(tinfo.packages_class_method_fullname, log_file)
                 cursor.executemany('''
                             INSERT INTO traces(tmid, mid, vector)
                             VALUES(?,?,?)
@@ -205,12 +224,12 @@ class MavenTestTraceDbFactory(object):
         logger.info("ingesting data to db - start")
         cursor = self.db.cursor()
         for tinfo in self.tsuite_info.tinfos:
-            if tinfo.tmethod_fullname not in self.map_from_methodfullname_to_guid:
-                self.map_from_methodfullname_to_guid[tinfo.tmethod_fullname] = self.gen_method_id()
+            if tinfo.packages_class_method_fullname not in self.map_from_methodfullname_to_guid:
+                self.map_from_methodfullname_to_guid[tinfo.packages_class_method_fullname] = self.gen_method_id()
 
         # ingest outcomes
         logger.info("ingesting data to db step 1 of 3 - ingesting outcomes")
-        outcomes = [(self.map_from_methodfullname_to_guid[tinfo.tmethod_fullname], int(tinfo.is_faulty))
+        outcomes = [(self.map_from_methodfullname_to_guid[tinfo.packages_class_method_fullname], int(tinfo.is_faulty))
                     for tinfo in self.tsuite_info.tinfos]
         cursor.executemany('''
                   INSERT INTO outcomes(tmid, is_faulty)
@@ -248,8 +267,9 @@ class MavenTestTraceDbFactory(object):
 
     def gen_method_id(self):
         # there is no need to use the whole guid
-        return str(uuid.uuid4())
-        # return unique_mid[:unique_mid.index('-')]
+        uuid_split = str(uuid.uuid4()).split('-')
+        short_uuid = uuid_split[0] + uuid_split[1]
+        return short_uuid
 
     def create_generator_from_logs(self, tmid_name: str, log_file: TextIO):
         '''

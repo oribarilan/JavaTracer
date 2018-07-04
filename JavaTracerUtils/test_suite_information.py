@@ -7,8 +7,9 @@ from test_info import TestInfo
 import os
 import logging
 from shutil import rmtree
-import math
+
 logger = logging.getLogger('logger')
+
 
 class TestSuiteInformation(object):
     def __init__(self, tfiles_list_path):
