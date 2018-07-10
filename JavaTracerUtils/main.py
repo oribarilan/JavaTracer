@@ -13,8 +13,9 @@ actual_faults_method_fullname_set = frozenset({'fraction.BigFraction.BigFraction
 ON_THE_FLY = True  # don't create intermediate files -> this improves performance
 # endregion
 
-DEBUG = False
-SAMPLE_RATE = '0.05'
+DEBUG = True
+FAIL_SAMPLE_RATE = '0.01'
+SUCCESS_SAMPLE_RATE = '1.00'
 
 # config log
 BUG_CONFIGS = {
@@ -27,6 +28,8 @@ BUG_CONFIGS = {
     'ACTUAL_FAULTS': str(list(actual_faults_method_fullname_set)),
     'ON_THE_FLY': str(ON_THE_FLY)
 }
+
+# =================================================================================================================
 
 # region logger setup
 logger = logging.getLogger('logger')

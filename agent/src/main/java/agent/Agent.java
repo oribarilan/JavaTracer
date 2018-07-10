@@ -20,14 +20,16 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
+import java.io.FileReader;
+import java.io.File;
+import java.io.BufferedReader;
+
 public class Agent {
     public static boolean isDebug = false;
     public static boolean isPrintRecord = false;
-
-    //sampling
     public static boolean isSamplingEnabled = true;
-    public static double sampleRate = 0.05;
 
+    public static String PATH_TO_CONFIG = "agent_config.cfg";
 
     //if true, tracer will switch output files every 20,000,000 records
     public static boolean isFileSwitch = false;
@@ -36,6 +38,7 @@ public class Agent {
         inst.addTransformer(new ClassFileTransformer() {
 
             public boolean isInitiated = false;
+            public double SAMPLE_RATE;
 
             public void AddWriteMethod(CtClass cc){
                 try{
@@ -115,9 +118,30 @@ public class Agent {
                         AddWriteField(cc);
                         AddWriteMethod(cc);
                         cc.setModifiers(Modifier.PUBLIC);
-			            cc.toClass(loader, protectionDomain);
+                        cc.toClass(loader, protectionDomain);
                         ClassPath cpath = new ClassClassPath(cc.getClass());
                         cp.insertClassPath(cpath);
+
+                        // read config file
+                        File fil = new File(PATH_TO_CONFIG);
+                        FileReader inputFil = new FileReader(fil);
+                        BufferedReader in = new BufferedReader(inputFil);
+                        String s = in.readLine();
+                        int i = 0;
+                        double[] values = new double[10];
+                        while (s != null) {
+                            // Skip empty lines.
+                            s = s.trim();
+                            if (s.length() == 0) {
+                                continue;
+                            }
+
+                            values[i] = Double.parseDouble(s); // This is line 19.
+                            s = in.readLine();
+                            i++;
+                        }
+                        in.close();
+                        SAMPLE_RATE = values[0];
                     }
                 }catch(Exception e){
                     System.out.println("$$$$ EXCEPTION - cant insert singlefilewriter class $$$$");
@@ -177,7 +201,7 @@ public class Agent {
                     afterCode.append(String.format("agent.SingleFileWriter.write(%s);", MethodRecord.GetRecordVariableName()));
                     afterCode.append("}else{");
                     afterCode.append("Random javaagent_rand = new Random();");
-                    afterCode.append(String.format("boolean javaagent_shouldSample = javaagent_rand.nextDouble() < %.7f;", sampleRate));
+                    afterCode.append(String.format("boolean javaagent_shouldSample = javaagent_rand.nextDouble() < %.7f;", SAMPLE_RATE));
                     afterCode.append("if (javaagent_shouldSample) {");
                     afterCode.append(String.format("agent.SingleFileWriter.write(%s);", MethodRecord.GetRecordVariableName()));
                     afterCode.append("}");
