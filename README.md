@@ -7,7 +7,8 @@ Version `1.1` (see 'Updates' for more information)
 
 ## Description & Features
 
-  - `traces.txt` file will be created, containing all of the traces
+  - `traces.txt` file will be created, containing the traces sampled during the target program run-time
+  - Traces sample rate can be configured
   - A trace is a log that contains various data about the invocation of a method
   - Data that is currently being traced:
     -   Method's name
@@ -19,7 +20,7 @@ Version `1.1` (see 'Updates' for more information)
 ## Setup & Parameters
 
   - If you would like to remove a common prefix from all traces, please view the `PREFIX_COMMONMATH` constant in `MethodRecord.java`
-  - TODO: explain sampleRate
+  - In the **target** program root folder (the root folder of where the invocation of the program would happen), create a a configuration file named `agent_config.cfg`. This file should contain only one float value, which will act as the sample rate. This value can be configured between different program invocations (the agents reads it at initialization).
 
 ## Prerequisites
 
