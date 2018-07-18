@@ -14,14 +14,15 @@ ON_THE_FLY = True  # don't create intermediate files -> this improves performanc
 # endregion
 
 DEBUG = True
-FAIL_SAMPLE_RATE = '0.01'
-SUCCESS_SAMPLE_RATE = '1.00'
+FAIL_SAMPLE_RATE = 1.00
+SUCCESS_SAMPLE_RATE = 0.01
 
 # config log
 BUG_CONFIGS = {
     'DATE': str(datetime.datetime.now()),
     'DEBUG': str(DEBUG),
-    'SAMPLE_RATE': SAMPLE_RATE,
+    'FAIL_SAMPLE_RATE': str(FAIL_SAMPLE_RATE),
+    'SUCCESS_SAMPLE_RATE': str(SUCCESS_SAMPLE_RATE),
     'PROJECT_ROOT_PATH': PROJECT_ROOT_PATH,
     'BUG_PROJECT': BUG_PROJECT,
     'BUG_ID': str(BUG_ID),
@@ -57,6 +58,7 @@ db_builder = MavenTestTraceDbFactory(project_root_path=PROJECT_ROOT_PATH, test_f
                                      bug_project=BUG_PROJECT, bug_id=BUG_ID,
                                      actual_faults_method_fullname_set=actual_faults_method_fullname_set,
                                      on_the_fly=ON_THE_FLY,
-                                     bug_configurations_to_log=BUG_CONFIGS)
+                                     bug_configurations_to_log=BUG_CONFIGS,
+                                     fail_sample_rate=FAIL_SAMPLE_RATE, success_sample_rate=SUCCESS_SAMPLE_RATE)
 
 # remove raw data storage

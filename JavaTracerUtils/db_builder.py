@@ -11,6 +11,7 @@ import subprocess
 import uuid
 from typing import TextIO, Dict, FrozenSet
 from test_info import TestInfo
+from queue import Queue
 
 from test_suite_information import TestSuiteInformation
 from trace import Trace
@@ -26,7 +27,8 @@ class MavenTestTraceDbFactory(object):
 
     def __init__(self, test_files_list_path, project_root_path, log_file_path, output_data_root_path,
                  bug_project, bug_id: int, actual_faults_method_fullname_set: FrozenSet[str],
-                 on_the_fly: bool, bug_configurations_to_log: Dict[str, str]):
+                 on_the_fly: bool, bug_configurations_to_log: Dict[str, str],
+                 fail_sample_rate: float, success_sample_rate: float):
         """
         Invoking this class will initially create the following raw data:
         ...\<test_class_name>\<test_method_name>\tmethod_info.log -
@@ -54,10 +56,12 @@ class MavenTestTraceDbFactory(object):
         self.log_file_path = log_file_path
         assert not os.path.exists(self.log_file_path), f'log file at {self.log_file_path} exists, delete it'
         self.output_data_path = path.join(output_data_root_path, bug_project, str(bug_id))
-        assert not os.path.exists(self.output_data_path), f'path {self.output_data_path} exists, clean previous data'
+        self.bug_db_path = path.join(self.output_data_path, 'bugdb.sqlite')
+        assert not os.path.exists(self.bug_db_path), f'path {self.bug_db_path} exists, clean previous bugdb'
         self.actual_faults_method_fullname_set = actual_faults_method_fullname_set
         self.map_from_methodfullname_to_guid = dict()
-
+        self.fail_sample_rate = fail_sample_rate
+        self.success_sample_rate = success_sample_rate
         # prepare
         if not os.path.exists(self.output_data_path):
             os.makedirs(self.output_data_path)
@@ -79,8 +83,15 @@ class MavenTestTraceDbFactory(object):
         self.db.close()
         logger.info('done building MavenTestTraceDbFactory')
 
+    def set_tracer_sample_rate(self, sample_rate: float):
+        config_file_name = "agent_config.cfg"
+        config_path = path.join(self.project_root_path, config_file_name)
+        assert path.exists(config_path), f"missing config: {config_path}"
+        with open(config_path, "w") as cfg:
+            cfg.write(str(sample_rate))
+
     def db_init(self, bug_configurations_to_log):
-        db = sqlite3.connect(path.join(self.output_data_path, 'bugdb.sqlite'))
+        db = sqlite3.connect(path.join(self.bug_db_path))
         cursor = db.cursor()
         cursor.execute('PRAGMA synchronous = OFF')
         cursor.execute('PRAGMA journal_mode = OFF')  # disable logging for performance
@@ -122,8 +133,18 @@ class MavenTestTraceDbFactory(object):
         total = len(self.tsuite_info.tinfos)
         for idx, tinfo in enumerate(self.tsuite_info.tinfos):
             logger.debug(f"{idx+1}/{total}\t\t: handling {tinfo.tfile_name}, {tinfo.tmethod_name}")
+            # 1 - run with 0 sample rate, just to check if test failed or pass
+            self.set_tracer_sample_rate(sample_rate=0.0)
             output = self.run_test(tinfo.tfile_name, tinfo.tmethod_name)
             tinfo.add_result_from_output(output)
+            # 2 - run again with the relevant sample rate
+            assert not os.path.exists(self.log_file_path), "log file should not exists before running individual test"
+            if tinfo.is_faulty:
+                test_sample_rate = self.fail_sample_rate
+            else:
+                test_sample_rate = self.success_sample_rate
+            self.set_tracer_sample_rate(sample_rate=test_sample_rate)
+            self.run_test(tinfo.tfile_name, tinfo.tmethod_name)
             if on_the_fly:
                 self.db_ingest_test_to_bugdb(tinfo)
             else:
@@ -251,16 +272,29 @@ class MavenTestTraceDbFactory(object):
         self.db.commit()
         cursor.close()
 
+    @staticmethod
+    def is_test_method(method_name: str) -> bool:
+        return method_name.rfind('.test') > -1
+
     def db_ingest_methods(self):
+        values = []
+        for (method_name, method_id) in self.map_from_methodfullname_to_guid.items():
+            if method_name in self.actual_faults_method_fullname_set:
+                is_true_fault = 1
+            else:
+                is_true_fault = 0
+
+            if self.is_test_method(method_name):
+                is_test_method = 1
+            else:
+                is_test_method = 0
+            values.append((method_id, method_name, is_true_fault, is_test_method))
+
         cursor = self.db.cursor()
         logger.info("ingesting data to db step 3 of 3 - ingesting methods")
-        # flipping (method_id, method_name) intentionally
-        values = [(method_id, method_name, 1) if method_name in self.actual_faults_method_fullname_set
-                  else (method_id, method_name, 0)
-                  for (method_name, method_id) in self.map_from_methodfullname_to_guid.items()]
         cursor.executemany('''
-                        INSERT INTO methods(method_id, method_name, has_real_faulty)
-                        VALUES(?,?,?)
+                        INSERT INTO methods(method_id, method_name, is_real_faulty, is_test_method)
+                        VALUES(?,?,?,?)
                         ''', values)
         self.db.commit()
         cursor.close()
@@ -307,7 +341,8 @@ class MavenTestTraceDbFactory(object):
             CREATE TABLE methods(
                 method_id TEXT PRIMARY KEY, 
                 method_name TEXT,
-                has_real_faulty INTEGER
+                is_real_faulty INTEGER,
+                is_test_method INTEGER
             )
         ''')
         self.db.commit()
@@ -328,7 +363,12 @@ class MavenTestTraceDbFactory(object):
         ''')
         cursor.execute('''
                 CREATE INDEX `idx_methods_isfaulty` ON `methods` (
-                    `has_real_faulty`
+                    `is_real_faulty`
+                )
+        ''')
+        cursor.execute('''
+                CREATE INDEX `idx_methods_istest` ON `methods` (
+                    `is_test_method`
                 )
         ''')
         self.db.commit()
