@@ -131,25 +131,45 @@ class MavenTestTraceDbFactory(object):
     def invoke_individual_tests_with_tracer(self, on_the_fly: bool):
         # run each test to get results
         total = len(self.tsuite_info.tinfos)
+        self.set_tracer_sample_rate(sample_rate=0.0)
+        # 1 - run with 0 sample rate, just to check if test failed or pass
         for idx, tinfo in enumerate(self.tsuite_info.tinfos):
-            logger.debug(f"{idx+1}/{total}\t\t: handling {tinfo.tfile_name}, {tinfo.tmethod_name}")
-            # 1 - run with 0 sample rate, just to check if test failed or pass
-            self.set_tracer_sample_rate(sample_rate=0.0)
+            logger.debug(f"{idx+1}/{total}\t\t: checking {tinfo.tfile_name}, {tinfo.tmethod_name}")
             output = self.run_test(tinfo.tfile_name, tinfo.tmethod_name)
             tinfo.add_result_from_output(output)
-            # 2 - run again with the relevant sample rate
-            assert not os.path.exists(self.log_file_path), "log file should not exists before running individual test"
-            if tinfo.is_faulty:
-                test_sample_rate = self.fail_sample_rate
-            else:
-                test_sample_rate = self.success_sample_rate
-            self.set_tracer_sample_rate(sample_rate=test_sample_rate)
+
+        if os.path.isfile(self.log_file_path): #TODO file should not be here, assert instead of check
+            logger.warning(f"deleting log_file at {self.log_file_path}")
+            os.remove(self.log_file_path)
+
+        count = self.tsuite_info.remove_wrongly_executed_test()
+        logger.debug(f"{count} tests could not be invoked properly (deleted)")
+
+        # 2 - run again with the relevant sample rate
+        passing_tests = [tinfo for tinfo in self.tsuite_info.tinfos if not tinfo.is_faulty]
+        self.set_tracer_sample_rate(sample_rate=self.success_sample_rate)
+        for idx, tinfo in enumerate(passing_tests):
+            logger.debug(f"{idx+1}/{len(passing_tests)}\t\t: handling {tinfo.tfile_name}, {tinfo.tmethod_name} [PASSING]")
+            assert not os.path.isfile(self.log_file_path), "log file should not exists before running individual test"
             self.run_test(tinfo.tfile_name, tinfo.tmethod_name)
             if on_the_fly:
                 self.db_ingest_test_to_bugdb(tinfo)
             else:
                 self.route_traces_to_test_folder(tinfo.tfile_name, tinfo.tmethod_name)
+
+        failing_tests = [tinfo for tinfo in self.tsuite_info.tinfos if tinfo.is_faulty]
+        self.set_tracer_sample_rate(sample_rate=self.fail_sample_rate)
+        for idx, tinfo in enumerate(failing_tests):
+            logger.debug(f"{idx+1}/{len(failing_tests)}\t\t: handling {tinfo.tfile_name}, {tinfo.tmethod_name} [FAILING]")
+            assert not os.path.isfile(self.log_file_path), "log file should not exists before running individual test"
+            self.run_test(tinfo.tfile_name, tinfo.tmethod_name)
+            if on_the_fly:
+                self.db_ingest_test_to_bugdb(tinfo)
+            else:
+                self.route_traces_to_test_folder(tinfo.tfile_name, tinfo.tmethod_name)
+
         logger.debug(f"invoked 100% of all test methods")
+        logger.debug(f"{count} tests could not be invoked properly (deleted)")
         logger.info(f'each test class and test method tracer were stored at: "{self.output_data_path}"')
 
     def run_test(self, test_class_name, test_method_name):

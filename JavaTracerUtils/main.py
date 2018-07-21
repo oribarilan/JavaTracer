@@ -13,9 +13,9 @@ actual_faults_method_fullname_set = frozenset({'fraction.BigFraction.BigFraction
 ON_THE_FLY = True  # don't create intermediate files -> this improves performance
 # endregion
 
-DEBUG = True
+DEBUG = False
 FAIL_SAMPLE_RATE = 1.00
-SUCCESS_SAMPLE_RATE = 0.01
+SUCCESS_SAMPLE_RATE = 0.05
 
 # config log
 BUG_CONFIGS = {

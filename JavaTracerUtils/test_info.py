@@ -18,6 +18,8 @@ class TestInfo(object):
         self.tannotations = tannotations_lst
         self.is_faulty = None
 
+        self.wrongly_executed = None
+
     def add_result_from_output(self, test_output_str_result):
         """
         :param test_output_str_result: output given by `surefire` when running this single test
@@ -29,6 +31,7 @@ class TestInfo(object):
             print(test_output_str_result)
             print("WARNING- unexpected result from mvn surefire")
             self.is_faulty = False
+            self.wrongly_executed = True
             return
         result_dirty = test_output_str_result[result_idx:]
         result = result_dirty[:result_dirty.find('\n')]
@@ -38,3 +41,4 @@ class TestInfo(object):
         assert num_of_tests < 2  # expecting only 1 test, allowing zero
         self.is_faulty = (failures + errors > 0)  # failed tests often result in an error
         assert skipped == 0  # test was skipped
+        self.wrongly_executed = False

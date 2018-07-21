@@ -22,20 +22,25 @@ class TestSuiteInformation(object):
         example: "commons-math\target\maven-status\maven-compiler-plugin\testCompile\default-testCompile\inputFiles.lst"
         '''
         print_count = 0
+        abstract_count = 0
         self.tinfos = []
         with open(tfiles_list_path, "r") as tfiles_paths:
             tfile_paths_list = list(tfiles_paths)
             for idx, tfile_path in enumerate(tfile_paths_list):
                 tfile_path = tfile_path.rstrip('\n')
                 tfile_name = Path(tfile_path).stem
+                if tfile_name.endswith('AbstractTest'):
+                    abstract_count += 1
+                    continue
                 tmethodnameTannotations = JavaTestClassFileParser.parse_and_return_methodnameTannotations(tfile_path)
                 for (tmethod_name, annotations) in tmethodnameTannotations:
                     self.tinfos.append(TestInfo(tfile_path, tfile_name, tmethod_name, annotations))
                 if print_count == 20:
-                    logger.debug(f"added {idx +1} out of {len(tfile_paths_list)} test files information")
+                    logger.debug(f"processed {idx +1} out of {len(tfile_paths_list)} test files information")
                     print_count = 0
                 print_count += 1
-        logger.debug(f"added all {len(tfile_paths_list)} test files information")
+        logger.debug(f"ignored {abstract_count} abstract test classes")
+        logger.debug(f"added {len(self.tinfos)} test files information")
 
     def filter_in_valid_tests(self):
         tinfos_filtered = []
@@ -47,6 +52,7 @@ class TestSuiteInformation(object):
                 tinfos_filtered.append(tinfo)
         self.tinfos = tinfos_filtered
 
+    @DeprecationWarning
     def filter_out_big_trace_files(self, max_size_in_mb):
         deleted_count = 0
         for (idx, tinfo) in enumerate(self.tinfos):
@@ -62,3 +68,11 @@ class TestSuiteInformation(object):
                 rmtree(tmethod_dir_path)
                 del self.tsuite_info.tinfos[idx]
         return deleted_count
+
+    def remove_wrongly_executed_test(self):
+        count = 0
+        for tinfo in self.tinfos:
+            if tinfo.wrongly_executed:
+                self.tinfos.remove(tinfo)
+                count += 1
+        return count
