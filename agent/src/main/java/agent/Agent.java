@@ -39,6 +39,7 @@ public class Agent {
         inst.addTransformer(new ClassFileTransformer() {
 
             public boolean isInitiated = false;
+            public boolean shouldTransform = false;
             public double SAMPLE_RATE;
 
             public void AddWriteMethod(CtClass cc){
@@ -132,20 +133,6 @@ public class Agent {
                 try{
                     if(!isInitiated){
                         isInitiated = true;
-                        ClassPool cp = ClassPool.getDefault();
-                        cp.importPackage("java.io.BufferedWriter");
-                        cp.importPackage("java.io.FileWriter");
-                        cp.importPackage("java.io.File");
-                        cp.importPackage("java.util.HashSet");
-                        cp.importPackage("java.util.Random");
-                        CtClass cc = cp.makeClass("agent.SingleFileWriter");
-                        AddWriteField(cc);
-                        AddWriteMethod(cc);
-                        AddRandomMethod(cc);
-                        cc.setModifiers(Modifier.PUBLIC);
-                        cc.toClass(loader, protectionDomain);
-                        ClassPath cpath = new ClassClassPath(cc.getClass());
-                        cp.insertClassPath(cpath);
 
                         // read config file
                         File fil = new File(PATH_TO_CONFIG);
@@ -167,6 +154,24 @@ public class Agent {
                         }
                         in.close();
                         SAMPLE_RATE = values[0];
+                        if(SAMPLE_RATE > 0){
+                          shouldTransform = true;
+                        }
+
+                        ClassPool cp = ClassPool.getDefault();
+                        cp.importPackage("java.io.BufferedWriter");
+                        cp.importPackage("java.io.FileWriter");
+                        cp.importPackage("java.io.File");
+                        cp.importPackage("java.util.HashSet");
+                        cp.importPackage("java.util.Random");
+                        CtClass cc = cp.makeClass("agent.SingleFileWriter");
+                        AddWriteField(cc);
+                        AddWriteMethod(cc);
+                        AddRandomMethod(cc);
+                        cc.setModifiers(Modifier.PUBLIC);
+                        cc.toClass(loader, protectionDomain);
+                        ClassPath cpath = new ClassClassPath(cc.getClass());
+                        cp.insertClassPath(cpath);
                     }
                 }catch(Exception e){
                     System.out.println("$$$$ EXCEPTION - cant insert singlefilewriter class $$$$");
@@ -245,6 +250,9 @@ public class Agent {
             @Override
             public byte[] transform(ClassLoader classLoader, String className, Class<?> aClass, ProtectionDomain protectionDomain, byte[] bytes) throws IllegalClassFormatException {
                 this.initiate(className, classLoader, protectionDomain);
+                if(!shouldTransform){
+                  return null;
+                }
 
                 try {
                     if(isIgnoredClass(className)){
