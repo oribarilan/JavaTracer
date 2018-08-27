@@ -9,12 +9,13 @@ import os.path as path
 import sqlite3
 import subprocess
 import uuid
-from typing import TextIO, Dict, FrozenSet
+from typing import TextIO, Dict, FrozenSet, List
 from test_info import TestInfo
 from queue import Queue
 
 from test_suite_information import TestSuiteInformation
 from trace import Trace
+from os import path
 
 TEST_METHOD_TRACES_LOG_FILENAME = 'test_method_traces.log'
 
@@ -28,7 +29,8 @@ class MavenTestTraceDbFactory(object):
     def __init__(self, test_files_list_path, project_root_path, log_file_path, output_data_root_path,
                  bug_project, bug_id: int, actual_faults_method_fullname_set: FrozenSet[str],
                  on_the_fly: bool, bug_configurations_to_log: Dict[str, str],
-                 fail_sample_rate: float, success_sample_rate: float):
+                 fail_sample_rate: float, success_sample_rate: float,
+                 ignored_test_files: List[str]):
         """
         Invoking this class will initially create the following raw data:
         ...\<test_class_name>\<test_method_name>\tmethod_info.log -
@@ -49,6 +51,7 @@ class MavenTestTraceDbFactory(object):
         :param actual_faults_method_fullname_set: a frozenset of the real faulty methods (full names)
         """
         # define
+        self.ignored_test_files = ignored_test_files
         self.bug_project = bug_project
         self.bug_id = bug_id
         self.tsuite_info = self.get_test_suit_info(test_files_list_path)
@@ -113,8 +116,7 @@ class MavenTestTraceDbFactory(object):
 
         return db
 
-    @staticmethod
-    def get_test_suit_info(test_files_list_path, filter_out_invalid=True):
+    def get_test_suit_info(self, test_files_list_path, filter_out_invalid=True):
         """
         :param filter_out_invalid: filters out invalid tests (@Deprecated or @Ignore)
         :return: TestSuiteInformation object with all test methods
@@ -124,49 +126,63 @@ class MavenTestTraceDbFactory(object):
         logger.info(f"found total of {len(tsuite_info.tinfos)} methods in test suit")
         if filter_out_invalid:
             logger.info("filtering out invalid tests (e.g. only @Tests without @Deprecated or @Ignore)")
-            tsuite_info.filter_in_valid_tests()
+            tsuite_info.filter_in_valid_tests(additional_classes_to_filter=self.ignored_test_files)
             logger.info(f"total of {len(tsuite_info.tinfos)} valid test methods")
         return tsuite_info
 
     def invoke_individual_tests_with_tracer(self, on_the_fly: bool):
-        # run each test to get results
-        total = len(self.tsuite_info.tinfos)
-        self.set_tracer_sample_rate(sample_rate=0.0)
-        # 1 - run with 0 sample rate, just to check if test failed or pass
-        for idx, tinfo in enumerate(self.tsuite_info.tinfos):
-            logger.debug(f"{idx+1}/{total}\t\t: checking {tinfo.tfile_name}, {tinfo.tmethod_name}")
-            output = self.run_test(tinfo.tfile_name, tinfo.tmethod_name)
-            tinfo.add_result_from_output(output)
+        run_once = self.fail_sample_rate == self.success_sample_rate
+        if run_once:
+            logger.info("Fail and Success sample rates are the same, running once on all tests")
+            total = len(self.tsuite_info.tinfos)
+            self.set_tracer_sample_rate(sample_rate=self.fail_sample_rate)
+            for idx, tinfo in enumerate(self.tsuite_info.tinfos):
+                logger.debug(f"{idx+1}/{total}\t\t: handling {tinfo.tfile_name}, {tinfo.tmethod_name} [PASSING]")
+                assert not os.path.isfile(self.log_file_path), "log file should not exists before running individual test"
+                self.run_test(tinfo.tfile_name, tinfo.tmethod_name)
+                if on_the_fly:
+                    self.db_ingest_test_to_bugdb(tinfo)
+                else:
+                    self.route_traces_to_test_folder(tinfo.tfile_name, tinfo.tmethod_name)
+        else:
+            # run each test to get results
+            total = len(self.tsuite_info.tinfos)
+            self.set_tracer_sample_rate(sample_rate=0.0)
+            # 1 - run with 0 sample rate, just to check if test failed or pass
+            for idx, tinfo in enumerate(self.tsuite_info.tinfos):
+                logger.debug(f"{idx+1}/{total}\t\t: checking {tinfo.tfile_name}, {tinfo.tmethod_name}")
+                output = self.run_test(tinfo.tfile_name, tinfo.tmethod_name)
+                tinfo.add_result_from_output(output)
 
-        if os.path.isfile(self.log_file_path): #TODO file should not be here, assert instead of check
-            logger.warning(f"deleting log_file at {self.log_file_path}")
-            os.remove(self.log_file_path)
+            if os.path.isfile(self.log_file_path): #TODO file should not be here, assert instead of check
+                logger.warning(f"deleting log_file at {self.log_file_path}")
+                os.remove(self.log_file_path)
 
-        count = self.tsuite_info.remove_wrongly_executed_test()
-        logger.debug(f"{count} tests could not be invoked properly (deleted)")
+            count = self.tsuite_info.remove_wrongly_executed_test()
+            logger.debug(f"{count} tests could not be invoked properly (deleted)")
 
-        # 2 - run again with the relevant sample rate
-        passing_tests = [tinfo for tinfo in self.tsuite_info.tinfos if not tinfo.is_faulty]
-        self.set_tracer_sample_rate(sample_rate=self.success_sample_rate)
-        for idx, tinfo in enumerate(passing_tests):
-            logger.debug(f"{idx+1}/{len(passing_tests)}\t\t: handling {tinfo.tfile_name}, {tinfo.tmethod_name} [PASSING]")
-            assert not os.path.isfile(self.log_file_path), "log file should not exists before running individual test"
-            self.run_test(tinfo.tfile_name, tinfo.tmethod_name)
-            if on_the_fly:
-                self.db_ingest_test_to_bugdb(tinfo)
-            else:
-                self.route_traces_to_test_folder(tinfo.tfile_name, tinfo.tmethod_name)
+            # 2 - run again with the relevant sample rate
+            passing_tests = [tinfo for tinfo in self.tsuite_info.tinfos if not tinfo.is_faulty]
+            self.set_tracer_sample_rate(sample_rate=self.success_sample_rate)
+            for idx, tinfo in enumerate(passing_tests):
+                logger.debug(f"{idx+1}/{len(passing_tests)}\t\t: handling {tinfo.tfile_name}, {tinfo.tmethod_name} [PASSING]")
+                assert not os.path.isfile(self.log_file_path), "log file should not exists before running individual test"
+                self.run_test(tinfo.tfile_name, tinfo.tmethod_name)
+                if on_the_fly:
+                    self.db_ingest_test_to_bugdb(tinfo)
+                else:
+                    self.route_traces_to_test_folder(tinfo.tfile_name, tinfo.tmethod_name)
 
-        failing_tests = [tinfo for tinfo in self.tsuite_info.tinfos if tinfo.is_faulty]
-        self.set_tracer_sample_rate(sample_rate=self.fail_sample_rate)
-        for idx, tinfo in enumerate(failing_tests):
-            logger.debug(f"{idx+1}/{len(failing_tests)}\t\t: handling {tinfo.tfile_name}, {tinfo.tmethod_name} [FAILING]")
-            assert not os.path.isfile(self.log_file_path), "log file should not exists before running individual test"
-            self.run_test(tinfo.tfile_name, tinfo.tmethod_name)
-            if on_the_fly:
-                self.db_ingest_test_to_bugdb(tinfo)
-            else:
-                self.route_traces_to_test_folder(tinfo.tfile_name, tinfo.tmethod_name)
+            failing_tests = [tinfo for tinfo in self.tsuite_info.tinfos if tinfo.is_faulty]
+            self.set_tracer_sample_rate(sample_rate=self.fail_sample_rate)
+            for idx, tinfo in enumerate(failing_tests):
+                logger.debug(f"{idx+1}/{len(failing_tests)}\t\t: handling {tinfo.tfile_name}, {tinfo.tmethod_name} [FAILING]")
+                assert not os.path.isfile(self.log_file_path), "log file should not exists before running individual test"
+                self.run_test(tinfo.tfile_name, tinfo.tmethod_name)
+                if on_the_fly:
+                    self.db_ingest_test_to_bugdb(tinfo)
+                else:
+                    self.route_traces_to_test_folder(tinfo.tfile_name, tinfo.tmethod_name)
 
         logger.debug(f"invoked 100% of all test methods")
         logger.debug(f"{count} tests could not be invoked properly (deleted)")
@@ -179,10 +195,17 @@ class MavenTestTraceDbFactory(object):
         :param test_method_name: the name of the test method, example: testCompose
         :return: surefire output string
         """
-        command = f"mvn -f={self.project_root_path}\\pom.xml surefire:test -Dtest={test_class_name}#{test_method_name}"
-        command = command.split(' ')
-        output = subprocess.run(command, stdout=subprocess.PIPE, shell=True, cwd=self.project_root_path)
-        surefire_output = output.stdout.decode(encoding='utf-8', errors='ignore')
+        command = f"mvn surefire:test -f={path.join(self.project_root_path, 'pom.xml')} -Dtest={test_class_name}#{test_method_name}"
+        logger.info(f"executing command: {command}")
+        # windows:
+        # command = command.split(' ')
+        # output = subprocess.run(command, stdout=subprocess.PIPE, shell=True, cwd=self.project_root_path)
+        # output = output.stdout
+        # mac:
+        p = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, cwd=self.project_root_path)
+        stdout, stderr = p.communicate()
+        surefire_output = stdout.decode(encoding='utf-8', errors='ignore')
+
         return surefire_output
 
     def db_ingest_test_to_bugdb(self, tinfo: TestInfo):
