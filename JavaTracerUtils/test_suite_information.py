@@ -2,6 +2,8 @@
 Describes a test suite
 """
 from pathlib import Path
+from typing import List
+
 from java_testclass_parser import JavaTestClassFileParser
 from test_info import TestInfo
 import os
@@ -42,13 +44,14 @@ class TestSuiteInformation(object):
         logger.debug(f"ignored {abstract_count} abstract test classes")
         logger.debug(f"added {len(self.tinfos)} test files information")
 
-    def filter_in_valid_tests(self):
+    def filter_in_valid_tests(self, additional_classes_to_filter: List[str]):
         tinfos_filtered = []
         for tinfo in self.tinfos:
             isTest = 'Test' in tinfo.tannotations
             isDeprecated = 'Deprecated' in tinfo.tannotations
             isIgnore = 'Ignore' in tinfo.tannotations
-            if isTest and not isDeprecated and not isIgnore:
+            isConfiguredToBeIgnored = tinfo.tfile_name in additional_classes_to_filter
+            if isTest and not isDeprecated and not isIgnore and not isConfiguredToBeIgnored:
                 tinfos_filtered.append(tinfo)
         self.tinfos = tinfos_filtered
 
