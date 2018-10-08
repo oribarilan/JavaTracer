@@ -112,3 +112,10 @@ mvn install -DskipTests -fae
 
 * [Amir Elmishali](https://github.com/amir9979). A contributor to this project
 * [Thomas Queste](http://www.tomsquest.com/about). Thomas' [blog post](http://tomsquest.com/blog/2014/01/intro-java-agent-and-bytecode-manipulation/) helped greatly in the making of this project
+
+## Others
+
+defects4j cloning:
+`defects4j checkout -p Lang -v 1b -w /tmp/lang_1_buggy`
+b for buggy, f for fixed
+
