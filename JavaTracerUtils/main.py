@@ -1,6 +1,6 @@
 import logging
 
-from data.config import Config
+from config import Config
 from db_builder import MavenTestTraceDbFactory
 import datetime
 from os import path

@@ -139,7 +139,8 @@ class MavenTestTraceDbFactory(object):
             for idx, tinfo in enumerate(self.tsuite_info.tinfos):
                 logger.debug(f"{idx+1}/{total}\t\t: handling {tinfo.tfile_name}, {tinfo.tmethod_name} [PASSING]")
                 assert not os.path.isfile(self.log_file_path), "log file should not exists before running individual test"
-                self.run_test(tinfo.tfile_name, tinfo.tmethod_name)
+                output = self.run_test(tinfo.tfile_name, tinfo.tmethod_name)
+                tinfo.add_result_from_output(output)
                 if on_the_fly:
                     self.db_ingest_test_to_bugdb(tinfo)
                 else:
@@ -185,7 +186,6 @@ class MavenTestTraceDbFactory(object):
                     self.route_traces_to_test_folder(tinfo.tfile_name, tinfo.tmethod_name)
 
         logger.debug(f"invoked 100% of all test methods")
-        logger.debug(f"{count} tests could not be invoked properly (deleted)")
         logger.info(f'each test class and test method tracer were stored at: "{self.output_data_path}"')
 
     def run_test(self, test_class_name, test_method_name):
@@ -317,7 +317,8 @@ class MavenTestTraceDbFactory(object):
 
     @staticmethod
     def is_test_method(method_name: str) -> bool:
-        return method_name.rfind('.test') > -1
+        # in rare-cases test name might start with a capital T
+        return method_name.lower().rfind('.test') > -1
 
     def db_ingest_methods(self):
         values = []
