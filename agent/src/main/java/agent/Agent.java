@@ -30,6 +30,7 @@ public class Agent {
     public static boolean isSamplingEnabled = true;
 
     public static String PATH_TO_CONFIG = "agent_config.cfg";
+    public static long SEED = 7;
 
     //if true, tracer will switch output files every 20,000,000 records
     public static boolean isFileSwitch = false;
@@ -38,6 +39,7 @@ public class Agent {
         inst.addTransformer(new ClassFileTransformer() {
 
             public boolean isInitiated = false;
+            public boolean shouldTransform = false;
             public double SAMPLE_RATE;
 
             public void AddWriteMethod(CtClass cc){
@@ -72,8 +74,31 @@ public class Agent {
                 }
             }
 
+            public void AddRandomMethod(CtClass cc){
+                try{
+                    StringBuilder writeMethodSrc = new StringBuilder();
+                    writeMethodSrc.append("public static double randomlyShouldSample(){ ");
+                    writeMethodSrc.append("if (random == null) {");
+                    writeMethodSrc.append("random = new Random();");
+                    writeMethodSrc.append("}");
+                    writeMethodSrc.append("return random.nextDouble();");
+                    writeMethodSrc.append(" }");
+                    CtMethod m = CtNewMethod.make(writeMethodSrc.toString(), cc);
+                    m.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
+                    cc.addMethod(m);
+                }catch(Exception e){
+                    System.out.println("$$$$ Exception - cant add to method AddRandomMethod $$$$");
+                    System.out.println(e.toString());
+                }
+            }
+
             public void AddWriteField(CtClass cc){
                 try{
+                    CtField randomField;
+                    randomField = CtField.make("public static Random random = null;", cc);
+                    randomField.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
+                    cc.addField(randomField, "null");
+
                     CtField writesNumField;
                     writesNumField = CtField.make("public static int writesNum = 0;", cc);
                     writesNumField.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
@@ -108,19 +133,6 @@ public class Agent {
                 try{
                     if(!isInitiated){
                         isInitiated = true;
-                        ClassPool cp = ClassPool.getDefault();
-                        cp.importPackage("java.io.BufferedWriter");
-                        cp.importPackage("java.io.FileWriter");
-                        cp.importPackage("java.io.File");
-                        cp.importPackage("java.util.HashSet");
-                        cp.importPackage("java.util.Random");
-                        CtClass cc = cp.makeClass("agent.SingleFileWriter");
-                        AddWriteField(cc);
-                        AddWriteMethod(cc);
-                        cc.setModifiers(Modifier.PUBLIC);
-                        cc.toClass(loader, protectionDomain);
-                        ClassPath cpath = new ClassClassPath(cc.getClass());
-                        cp.insertClassPath(cpath);
 
                         // read config file
                         File fil = new File(PATH_TO_CONFIG);
@@ -142,6 +154,24 @@ public class Agent {
                         }
                         in.close();
                         SAMPLE_RATE = values[0];
+                        if(SAMPLE_RATE > 0){
+                          shouldTransform = true;
+                        }
+
+                        ClassPool cp = ClassPool.getDefault();
+                        cp.importPackage("java.io.BufferedWriter");
+                        cp.importPackage("java.io.FileWriter");
+                        cp.importPackage("java.io.File");
+                        cp.importPackage("java.util.HashSet");
+                        cp.importPackage("java.util.Random");
+                        CtClass cc = cp.makeClass("agent.SingleFileWriter");
+                        AddWriteField(cc);
+                        AddWriteMethod(cc);
+                        AddRandomMethod(cc);
+                        cc.setModifiers(Modifier.PUBLIC);
+                        cc.toClass(loader, protectionDomain);
+                        ClassPath cpath = new ClassClassPath(cc.getClass());
+                        cp.insertClassPath(cpath);
                     }
                 }catch(Exception e){
                     System.out.println("$$$$ EXCEPTION - cant insert singlefilewriter class $$$$");
@@ -200,8 +230,8 @@ public class Agent {
                     afterCode.append(String.format("if (!%s) {", isSamplingEnabled));
                     afterCode.append(String.format("agent.SingleFileWriter.write(%s);", MethodRecord.GetRecordVariableName()));
                     afterCode.append("}else{");
-                    afterCode.append("Random javaagent_rand = new Random();");
-                    afterCode.append(String.format("boolean javaagent_shouldSample = javaagent_rand.nextDouble() < %.7f;", SAMPLE_RATE));
+                    // afterCode.append(String.format("boolean javaagent_shouldSample = agent.SingleFileWriter.randomlyShouldSample(%s);", String.valueOf(SAMPLE_RATE)));
+                    afterCode.append("boolean javaagent_shouldSample = agent.SingleFileWriter.randomlyShouldSample() < " + SAMPLE_RATE + ";");
                     afterCode.append("if (javaagent_shouldSample) {");
                     afterCode.append(String.format("agent.SingleFileWriter.write(%s);", MethodRecord.GetRecordVariableName()));
                     afterCode.append("}");
@@ -220,6 +250,9 @@ public class Agent {
             @Override
             public byte[] transform(ClassLoader classLoader, String className, Class<?> aClass, ProtectionDomain protectionDomain, byte[] bytes) throws IllegalClassFormatException {
                 this.initiate(className, classLoader, protectionDomain);
+                if(!shouldTransform){
+                  return null;
+                }
 
                 try {
                     if(isIgnoredClass(className)){
