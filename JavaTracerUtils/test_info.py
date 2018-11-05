@@ -3,6 +3,8 @@ This class represents a single test method and its result
 """
 import re
 
+from config import Config
+
 
 class TestInfo(object):
     """
@@ -17,8 +19,12 @@ class TestInfo(object):
                                               + '.' + tmethod_name
         self.tannotations = tannotations_lst
         self.is_faulty = None
-
         self.wrongly_executed = None
+
+        # calc packages
+        method_path = self.packages_class_method_fullname.lstrip(Config.PROJECT_ROOT_PATH)
+        self.package_set = set(method_path[:method_path.rfind('/')].split('/'))
+        self.is_in_faulty_package = len(Config.tests_fail_in_packages.intersection(self.package_set)) > 0
 
     def add_result_from_output(self, test_output_str_result):
         """

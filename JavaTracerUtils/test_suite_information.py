@@ -4,6 +4,7 @@ Describes a test suite
 from pathlib import Path
 from typing import List
 
+from config import Config
 from java_testclass_parser import JavaTestClassFileParser
 from test_info import TestInfo
 import os
@@ -36,7 +37,9 @@ class TestSuiteInformation(object):
                     continue
                 tmethodnameTannotations = JavaTestClassFileParser.parse_and_return_methodnameTannotations(tfile_path)
                 for (tmethod_name, annotations) in tmethodnameTannotations:
-                    self.tinfos.append(TestInfo(tfile_path, tfile_name, tmethod_name, annotations))
+                    tinfo = TestInfo(tfile_path, tfile_name, tmethod_name, annotations)
+                    if Config.SAMPLE_ONLY_ACTUAL_FAULTY_PACKAGES and tinfo.is_in_faulty_package:
+                        self.tinfos.append(tinfo)
                 if print_count == 20:
                     logger.debug(f"processed {idx +1} out of {len(tfile_paths_list)} test files information")
                     print_count = 0

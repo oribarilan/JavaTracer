@@ -30,7 +30,7 @@ class MavenTestTraceDbFactory(object):
                  bug_project, bug_id: int, actual_faults_method_fullname_set: FrozenSet[str],
                  on_the_fly: bool, bug_configurations_to_log: Dict[str, str],
                  fail_sample_rate: float, success_sample_rate: float,
-                 ignored_test_files: List[str]):
+                 ignored_test_files: List[str], is_sample_only_faulty: bool):
         """
         Invoking this class will initially create the following raw data:
         ...\<test_class_name>\<test_method_name>\tmethod_info.log -
@@ -65,6 +65,7 @@ class MavenTestTraceDbFactory(object):
         self.map_from_methodfullname_to_guid = dict()
         self.fail_sample_rate = fail_sample_rate
         self.success_sample_rate = success_sample_rate
+        self.is_sample_only_faulty = is_sample_only_faulty
         # prepare
         if not os.path.exists(self.output_data_path):
             os.makedirs(self.output_data_path)
@@ -223,7 +224,8 @@ class MavenTestTraceDbFactory(object):
         # ingest traces
         if os.path.exists(self.log_file_path):
             with open(self.log_file_path, mode="r") as log_file:
-                traces_generator = self.create_generator_from_logs(tinfo.packages_class_method_fullname, log_file)
+                traces_generator = self.create_generator_from_logs(tinfo.packages_class_method_fullname, log_file,
+                                                                   self.is_sample_only_faulty)
                 cursor.executemany('''
                             INSERT INTO traces(tmid, mid, vector)
                             VALUES(?,?,?)
@@ -307,7 +309,8 @@ class MavenTestTraceDbFactory(object):
         for logfilename in glob.iglob(generic_path_to_traces_log_file, recursive=True):
             tmid_name = '.'.join(logfilename.split('\\')[-3:-1])
             with open(logfilename, mode="r") as log_file:
-                traces_generator = self.create_generator_from_logs(tmid_name, log_file)
+                traces_generator = self.create_generator_from_logs(tmid_name, log_file,
+                                                                   self.is_sample_only_faulty)
                 cursor.executemany('''
                             INSERT INTO traces(tmid, mid, vector)
                             VALUES(?,?,?)
@@ -349,15 +352,17 @@ class MavenTestTraceDbFactory(object):
         short_uuid = uuid_split[0] + uuid_split[1]
         return short_uuid
 
-    def create_generator_from_logs(self, tmid_name: str, log_file: TextIO):
+    def create_generator_from_logs(self, tmid_name: str, log_file: TextIO, generate_only_faulty_method_traces: bool):
         '''
         :param tmid_name: identifier for the test method, example: 'BigFractionFormatTest.testDenominatorFormat'
         :param log_file: file handler for the log file
-        :param map_from_methodfullname_to_guid:
+        :param generate_only_faulty_method_traces: wiil only generate traces for faulty methods
         :return:
         '''
         for log in log_file:
             trace = Trace(tmid_name, log)
+            if generate_only_faulty_method_traces and trace.mid_name not in self.actual_faults_method_fullname_set:
+                continue
             trace.tmid_guid = self.map_from_methodfullname_to_guid[trace.tmid_name]
             if trace.mid_name not in self.map_from_methodfullname_to_guid:
                 self.map_from_methodfullname_to_guid[trace.mid_name] = self.gen_method_id()

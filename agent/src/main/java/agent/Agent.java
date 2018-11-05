@@ -192,7 +192,10 @@ public class Agent {
                 boolean isMaven = s.length >= 3 && s[0].equals("org") && s[1].equals("apache") && s[2].equals("maven") ;
                 boolean isTestClass = lowerClassName.contains("test");
                 boolean isJdk = lowerClassName.contains("jdk");
-                return (isJavaClass || isJunitClass || isJdk || isSun || isSurefire || isMaven || isTestClass);
+
+                boolean isTargetPackage = className.startsWith("org/apache/commons/math3/distribution/");
+
+                return (isJavaClass || isJunitClass || isJdk || isSun || isSurefire || isMaven || isTestClass || !isTargetPackage);
             }
 
             public boolean isIgnoredMethod(CtMethod method) {
@@ -203,8 +206,11 @@ public class Agent {
                 boolean isNative = Modifier.isNative(method.getModifiers());
                 boolean isAbstract = Modifier.isAbstract(method.getModifiers());
                 boolean isTestMethod = lowerMethodName.contains("test");
+
+                // boolean isTargetMethod = method.getLongName().contains("getNumericalMean");
+
                 return (isNative || isAbstract || isTestMethod);
-			}
+            }
 
             public void treatMethod(CtBehavior method) throws IllegalClassFormatException{
                 //CtBehavior is either a method or a constructor
@@ -278,7 +284,7 @@ public class Agent {
                     }
                     CtConstructor[] constructors = cc.getDeclaredConstructors();
                     for(CtConstructor c : constructors){
-                      treatMethod(c);
+                      //treatMethod(c);
                     }
                     byte[] byteCode = cc.toBytecode();
                     cc.detach();

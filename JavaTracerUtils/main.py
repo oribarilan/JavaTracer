@@ -53,6 +53,7 @@ db_builder = MavenTestTraceDbFactory(project_root_path=Config.PROJECT_ROOT_PATH,
                                      bug_configurations_to_log=BUG_CONFIGS,
                                      fail_sample_rate=Config.FAIL_SAMPLE_RATE,
                                      success_sample_rate=Config.SUCCESS_SAMPLE_RATE,
-                                     ignored_test_files=Config.IGNORED_CLASS_LIST)
+                                     ignored_test_files=Config.IGNORED_CLASS_LIST,
+                                     is_sample_only_faulty=Config.SAMPLE_ONLY_ACTUAL_FAULTY_METHODS)
 
 # remove raw data storage
